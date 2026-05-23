@@ -5,9 +5,15 @@ Turn your Magento storefront into a conversion machine. IDEA89 adds an AI-powere
 **5-minute install. No theme changes. No dev work.**
 
 [![Packagist Version](https://img.shields.io/packagist/v/idea89/magento2-assistant)](https://packagist.org/packages/idea89/magento2-assistant)
+[![Packagist Downloads](https://img.shields.io/packagist/dt/idea89/magento2-assistant)](https://packagist.org/packages/idea89/magento2-assistant)
 [![Magento 2](https://img.shields.io/badge/Magento-2.4.6+-orange)](https://magento.com)
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-blue)](https://php.net)
 [![License](https://img.shields.io/badge/License-OSL--3.0-green)](LICENSE)
+
+[![Coding Standard](https://github.com/idea89hq/magento-module/actions/workflows/coding-standard.yml/badge.svg)](https://github.com/idea89hq/magento-module/actions/workflows/coding-standard.yml)
+[![CodeQL](https://github.com/idea89hq/magento-module/actions/workflows/codeql.yml/badge.svg)](https://github.com/idea89hq/magento-module/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/idea89hq/magento-module/badge)](https://scorecard.dev/viewer/?uri=github.com/idea89hq/magento-module)
+[![Security Policy](https://img.shields.io/badge/security-policy-blue)](SECURITY.md)
 
 ---
 

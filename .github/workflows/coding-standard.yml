@@ -1,0 +1,34 @@
+name: Coding Standard
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  magento2:
+    name: Magento 2 Coding Standard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout module
+        uses: actions/checkout@v4
+        with:
+          path: module
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          tools: composer
+
+      - name: Install Magento Coding Standard
+        run: composer create-project --no-progress --stability=dev magento/magento-coding-standard _mcs
+
+      - name: Run phpcs (Magento2 ruleset, fail on errors)
+        run: |
+          cd _mcs
+          vendor/bin/phpcs --standard=Magento2 --extensions=php,phtml --warning-severity=0 --report=full ../module

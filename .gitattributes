@@ -1,0 +1,4 @@
+# Keep CI / meta files out of the Composer dist tarball (they stay on GitHub).
+/.github         export-ignore
+/.gitignore      export-ignore
+/.gitattributes  export-ignore
