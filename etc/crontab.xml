@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Cron:etc/crontab.xsd">
+    <group id="default">
+        <job name="idea89_daily_sync"
+             instance="Idea89\Assistant\Cron\DailySync"
+             method="execute">
+            <!-- 2am daily -->
+            <schedule>0 2 * * *</schedule>
+        </job>
+        <job name="idea89_drain_sync_queue"
+             instance="Idea89\Assistant\Cron\DrainSyncQueue"
+             method="execute">
+            <!-- every minute -->
+            <schedule>* * * * *</schedule>
+        </job>
+        <job name="idea89_sync_stock"
+             instance="Idea89\Assistant\Cron\SyncStock"
+             method="execute">
+            <!-- nightly reconciliation — real-time updates handled by StockItemSaveAfter observer -->
+            <schedule>0 3 * * *</schedule>
+        </job>
+        <job name="idea89_sync_promos"
+             instance="Idea89\Assistant\Cron\SyncPromos"
+             method="execute">
+            <!-- every 15 minutes -->
+            <schedule>*/15 * * * *</schedule>
+        </job>
+    </group>
+</config>

@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Idea89\Assistant\Model\Client\Idea89Client">
+        <arguments>
+            <argument name="logger" xsi:type="object">Psr\Log\LoggerInterface</argument>
+        </arguments>
+    </type>
+    <type name="Idea89\Assistant\Model\Sync\CatalogSyncer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Psr\Log\LoggerInterface</argument>
+        </arguments>
+    </type>
+    <type name="Idea89\Assistant\Model\Sync\ContentSyncer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Psr\Log\LoggerInterface</argument>
+        </arguments>
+    </type>
+    <type name="Idea89\Assistant\Observer\ProductSaved">
+        <arguments>
+            <argument name="logger" xsi:type="object">Psr\Log\LoggerInterface</argument>
+        </arguments>
+    </type>
+    <!-- Dynamically whitelist the IDEA89 API + widget hosts in the storefront CSP -->
+    <type name="Magento\Csp\Model\CompositePolicyCollector">
+        <arguments>
+            <argument name="collectors" xsi:type="array">
+                <item name="idea89_widget" xsi:type="object" sortOrder="50">Idea89\Assistant\Model\Csp\WidgetWhitelist</item>
+            </argument>
+        </arguments>
+    </type>
+</config>

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+    Whitelist the IDEA89 API host so Magento's Content Security Policy
+    allows the chat widget to POST to /v1/chat and /v1/catalog/*.
+    Without this, stores with an enforced (non-report-only) CSP will
+    silently block all widget → API communication.
+-->
+<csp_whitelist xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Csp:etc/csp_whitelist.xsd">
+    <policies>
+        <policy id="connect-src">
+            <values>
+                <value id="idea89-api" type="host">https://api.idea89.com</value>
+            </values>
+        </policy>
+    </policies>
+</csp_whitelist>

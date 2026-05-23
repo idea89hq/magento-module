@@ -1,0 +1,114 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <tab id="idea89" translate="label" sortOrder="500">
+            <label>IDEA89</label>
+        </tab>
+
+        <section id="idea89" translate="label" type="text" sortOrder="100" showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>AI Shopping Assistant</label>
+            <tab>idea89</tab>
+            <resource>Idea89_Assistant::config</resource>
+
+            <!-- ── General ─────────────────────────────────── -->
+            <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>General</label>
+
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Widget</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="api_key" translate="label comment" type="obscure" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>API Key</label>
+                    <comment>Paste the API key from your IDEA89 merchant dashboard.</comment>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                </field>
+
+                <field id="assistant_name" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Assistant Name</label>
+                    <comment>Name shown in the chat widget header, e.g. "Aria" or "Shop Helper".</comment>
+                </field>
+
+                <field id="store_context" translate="label comment" type="textarea" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Store Context</label>
+                    <comment>Describe what your store sells so the assistant can answer general questions. E.g. "We specialise in outdoor gardening tools and accessories for home and professional gardeners."</comment>
+                </field>
+
+                <field id="test_connection" translate="label" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Test Connection</label>
+                    <frontend_model>Idea89\Assistant\Block\Adminhtml\TestConnectionButton</frontend_model>
+                    <comment>Verifies the API key and connection to IDEA89.</comment>
+                </field>
+
+                <field id="sync_now" translate="label" sortOrder="60" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Sync Now</label>
+                    <frontend_model>Idea89\Assistant\Block\Adminhtml\SyncNowButton</frontend_model>
+                    <comment>Pushes products, categories, and CMS pages to IDEA89. Runs automatically every night.</comment>
+                </field>
+            </group>
+
+            <!-- ── Widget Appearance ───────────────────────── -->
+            <group id="widget" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Widget Appearance</label>
+
+                <field id="position" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Position</label>
+                    <source_model>Idea89\Assistant\Model\Config\Source\WidgetPosition</source_model>
+                </field>
+
+                <field id="brand_color" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Brand Colour</label>
+                    <comment>Hex colour code, e.g. #2563eb</comment>
+                    <validate>validate-color</validate>
+                </field>
+            </group>
+
+            <!-- ── Content Sync ────────────────────────────── -->
+            <group id="sync" translate="label" type="text" sortOrder="25" showInDefault="1" showInWebsite="1" showInStore="0">
+                <label>Content Sync</label>
+                <comment>Choose which content types are sent to IDEA89 to enrich the assistant's knowledge.</comment>
+
+                <field id="sync_products" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Sync Products</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Sync your product catalog (recommended: Yes).</comment>
+                </field>
+
+                <field id="sync_categories" translate="label" type="select" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Sync Categories</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Lets the assistant know what product categories your store has.</comment>
+                </field>
+
+                <field id="sync_cms" translate="label" type="select" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Sync CMS Pages</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Sync About Us, FAQs, contact pages etc. so the assistant can answer policy questions.</comment>
+                </field>
+
+                <field id="sync_store_info" translate="label" type="select" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Sync Store Info</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Sends store name and context description to IDEA89.</comment>
+                </field>
+            </group>
+
+            <!-- ── Advanced ────────────────────────────────── -->
+            <group id="advanced" translate="label" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Advanced</label>
+
+                <field id="api_url" translate="label comment" type="text" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>API URL (Server-side)</label>
+                    <comment>Used for product sync from Magento to IDEA89. For local dev with Docker: http://host.docker.internal:3000</comment>
+                </field>
+
+                <field id="widget_url" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Widget URL (Browser-side)</label>
+                    <comment>Used for the chat widget script tag loaded in the shopper's browser. For local dev: http://localhost:3000. Leave blank to use the API URL.</comment>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

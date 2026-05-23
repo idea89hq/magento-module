@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="catalog_product_save_after">
+        <observer name="idea89_product_saved"
+                  instance="Idea89\Assistant\Observer\ProductSaved"/>
+    </event>
+    <event name="cataloginventory_stock_item_save_after">
+        <observer name="idea89_stock_item_saved"
+                  instance="Idea89\Assistant\Observer\StockItemSaveAfter"/>
+    </event>
+    <event name="sales_rule_save_after">
+        <observer name="idea89_sales_rule_saved"
+                  instance="Idea89\Assistant\Observer\SalesRuleSaveAfter"/>
+    </event>
+    <event name="sales_rule_delete_after">
+        <observer name="idea89_sales_rule_deleted"
+                  instance="Idea89\Assistant\Observer\SalesRuleSaveAfter"/>
+    </event>
+</config>

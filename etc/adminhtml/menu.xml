@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Backend:etc/menu.xsd">
+    <menu>
+        <add id="Idea89_Assistant::config_section"
+             title="IDEA89"
+             translate="title"
+             module="Idea89_Assistant"
+             parent="Magento_Backend::stores_settings"
+             action="adminhtml/system_config/edit/section/idea89"
+             resource="Idea89_Assistant::config"
+             sortOrder="150"/>
+    </menu>
+</config>

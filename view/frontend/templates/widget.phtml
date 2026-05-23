@@ -1,0 +1,16 @@
+<?php
+/** @var \Idea89\Assistant\Block\Widget $block */
+if (!$block->shouldRender()) {
+    return;
+}
+?>
+<?php
+$brandColor = $block->getBrandColor();
+?>
+<script
+    src="<?= $block->escapeUrl($block->getWidgetUrl()) ?>/widget/v1/<?= $block->escapeUrl($block->getApiKey()) ?>.js"
+    data-key="<?= $block->escapeHtmlAttr($block->getApiKey()) ?>"
+    data-position="<?= $block->escapeHtmlAttr($block->getWidgetPosition()) ?>"
+    <?php if ($brandColor !== ''): ?>data-color="<?= $block->escapeHtmlAttr($brandColor) ?>"<?php endif; ?>
+    async
+></script>
