@@ -28,7 +28,10 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
-          publish_results: true
+          # Keep results internal (SARIF in the Security tab) — do not publish a
+          # public score; the OSS-governance metrics aren't meaningful for a
+          # solo commercial module and would misrepresent the module's safety.
+          publish_results: false
 
       - name: Upload SARIF to code scanning
         uses: github/codeql-action/upload-sarif@v4

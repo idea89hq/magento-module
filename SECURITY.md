@@ -12,8 +12,7 @@ Every change to this repository is automatically checked:
 
 - **Magento Coding Standard** (`Magento2` ruleset via PHP_CodeSniffer) — runs on every push.
 - **CodeQL** static analysis (JavaScript) — scans for security issues.
-- **OpenSSF Scorecard** — supply-chain / security best-practice scoring.
-- **Dependabot** — dependency monitoring and update PRs.
+- **OpenSSF Scorecard** — supply-chain / security best-practice checks (internal).
 
 The module's only outbound network calls go to the merchant-configured IDEA89 API
 through Magento's `Magento\Framework\HTTP\Client\Curl`. There is no obfuscated code,

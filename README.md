@@ -12,7 +12,6 @@ Turn your Magento storefront into a conversion machine. IDEA89 adds an AI-powere
 
 [![Coding Standard](https://github.com/idea89hq/magento-module/actions/workflows/coding-standard.yml/badge.svg)](https://github.com/idea89hq/magento-module/actions/workflows/coding-standard.yml)
 [![CodeQL](https://github.com/idea89hq/magento-module/actions/workflows/codeql.yml/badge.svg)](https://github.com/idea89hq/magento-module/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/idea89hq/magento-module/badge)](https://scorecard.dev/viewer/?uri=github.com/idea89hq/magento-module)
 [![Security Policy](https://img.shields.io/badge/security-policy-blue)](SECURITY.md)
 
 ---
