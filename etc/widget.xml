@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<widgets xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Widget:etc/widget.xsd">
+    <widget id="idea89_assistant_locator"
+            class="Idea89\Assistant\Block\Widget\Locator"
+            placeholder_image="Magento_Widget::placeholder.gif">
+        <label translate="true">IDEA89 Store Locator</label>
+        <description translate="true">Embed the interactive store finder (map + search + directions) inside any CMS page or block. Reads the Store Locator settings from Stores → Configuration → IDEA89 → Store Locator.</description>
+        <!-- No parameters — every knob the merchant has is already in
+             Stores → Configuration → IDEA89 → Store Locator. Adding
+             per-instance widget params here would be a second source
+             of truth and contradict the override-rule design. -->
+    </widget>
+</widgets>

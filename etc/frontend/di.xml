@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!-- Custom router catches the merchant-configured URL slug for the
+         store finder page and forwards to idea89_locator/index/index.
+         Runs BEFORE the standard router (sortOrder=25) so a custom slug
+         like /showrooms or /find-a-shop resolves before the default
+         router decides it's a 404.
+
+         The standard router has sortOrder=20, default has sortOrder=10.
+         We sit between them: try the custom slug first, fall through if
+         it doesn't match, let the standard router handle /store-finder
+         and everything else.
+
+         Source: Magento\Framework\App\Router\NoRouteHandlerList for
+         the canonical sort-order reference. -->
+    <type name="Magento\Framework\App\RouterList">
+        <arguments>
+            <argument name="routerList" xsi:type="array">
+                <item name="idea89_locator" xsi:type="array">
+                    <item name="class" xsi:type="string">Idea89\Assistant\Controller\Router</item>
+                    <item name="disable" xsi:type="boolean">false</item>
+                    <!-- sortOrder=15 sits BEFORE the URL Rewrite router (20) so a
+                         merchant slug like /showrooms wins over any existing CMS
+                         url_rewrite row, but AFTER the robots/securitytxt routers
+                         (10) so we never intercept robots.txt. The standard router
+                         (30+) and CMS router (60) trail us, which is correct. -->
+                    <item name="sortOrder" xsi:type="string">15</item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+</config>

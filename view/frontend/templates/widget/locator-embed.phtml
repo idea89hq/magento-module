@@ -1,0 +1,59 @@
+<?php
+/**
+ * CMS-embed variant of the locator. Renders ONLY the map + list, no
+ * page chrome (no hero, no help section, no stats row). Designed to
+ * drop inside whatever CMS content the merchant has built — they get
+ * the locator behaviour, they own the page surround.
+ *
+ * @var \Idea89\Assistant\Block\Widget\Locator $block
+ */
+$apiBase            = $block->escapeHtmlAttr($block->getApiBase());
+$apiKey             = $block->escapeHtmlAttr($block->getApiKey());
+$apiBaseJs          = $block->escapeJs($block->getApiBase());
+$apiKeyJs           = $block->escapeJs($block->getApiKey());
+$mapProvider        = $block->escapeHtmlAttr($block->getMapProvider());
+$mapKey             = $block->getMapKey();
+$mapKeyAttr         = $mapKey !== null ? $block->escapeHtmlAttr($mapKey) : null;
+$defaultCountry     = $block->getDefaultCountryCode();
+$defaultCountryAttr = $defaultCountry !== null ? $block->escapeHtmlAttr($defaultCountry) : null;
+$nearestCount       = (int) $block->getNearestResultsCount();
+
+$brandColor    = $block->getBrandColor();
+$brandColorAttr = $brandColor !== null
+    ? $block->escapeHtmlAttr($brandColor)
+    : '#0B6B47';
+?>
+<div class="idea89-locator-embed" style="--sf-accent: <?= $brandColorAttr ?>; position:relative; width:100%; height:80vh; min-height:560px; background:#FBFAF6; border:1px solid color-mix(in srgb, #0E1612 9%, transparent); border-radius:18px; overflow:hidden;">
+  <idea89-locator
+    mode="standalone"
+    api-base="<?= $apiBase ?>"
+    api-key="<?= $apiKey ?>"
+    map-provider="<?= $mapProvider ?>"
+    <?php if ($mapKeyAttr !== null): ?>map-key="<?= $mapKeyAttr ?>"<?php endif; ?>
+    <?php if ($defaultCountryAttr !== null): ?>default-country-code="<?= $defaultCountryAttr ?>"<?php endif; ?>
+    nearest-results-count="<?= $nearestCount ?>"
+    default-radius-km="100"
+  ></idea89-locator>
+</div>
+
+<?php /* Same defer + Google adapter handling as the standalone page —
+        see template comment in locator.phtml for the no-async rationale. */ ?>
+<script type="module" src="<?= $apiBase ?>/widget/v1/locator.js"></script>
+<?php if ($mapProvider === 'google'): ?>
+<script type="module" src="<?= $apiBase ?>/widget/v1/locator-google.js"></script>
+<?php endif; ?>
+
+<script>
+// Mirror the analytics forwarder from the standalone page. The
+// entry_point label changes so we can distinguish CMS-embedded usage
+// from the dedicated store finder URL in dashboard analytics.
+document.querySelector('.idea89-locator-embed')?.addEventListener('locator:analytics', function (e) {
+  var detail = e.detail || {};
+  fetch('<?= $apiBaseJs ?>/widget/v1/analytics', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-IDEA89-Key': '<?= $apiKeyJs ?>' },
+    body: JSON.stringify({ name: detail.name, properties: detail.properties, entry_point: 'cms-widget' }),
+    keepalive: true,
+  }).catch(function () {});
+});
+</script>

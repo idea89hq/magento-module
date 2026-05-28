@@ -95,6 +95,135 @@
                 </field>
             </group>
 
+            <!-- ── Store Locator ───────────────────────────── -->
+            <group id="locator" translate="label comment" type="text" sortOrder="27" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Store Locator</label>
+                <comment><![CDATA[
+<div style="padding:10px 14px;margin:0 0 6px;background:#fff8e1;border:1px solid #f4d35e;border-radius:6px;color:#5a4500;font-size:13px;line-height:1.5;">
+  <strong style="color:#7a5a00;">✨ Pro plan feature.</strong> The Store Locator is included on the <strong>Pro</strong> tier and above.
+  If you're on Starter, upgrade in your <a href="https://app.idea89.com/billing" target="_blank" rel="noopener" style="color:#5a4500;text-decoration:underline;">IDEA89 dashboard</a> to use these settings.
+</div>
+<div style="font-size:12.5px;color:#555;line-height:1.5;">
+  Online-only retailer? Set <strong>Enable Store Locator</strong> below to <em>No</em> — the page and chat-widget locator both disappear from your storefront.<br/>
+  All content fields fall back to sensible defaults when blank. Leave layout blank to inherit the global setting from your dashboard.<br/>
+  Tip: you can embed the locator inside any CMS page via the <strong>IDEA89 Store Locator</strong> widget.
+</div>
+                ]]></comment>
+
+                <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Store Locator</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment><![CDATA[
+<strong>Yes</strong> — the store finder page is live and the CMS widget renders.<br/>
+<strong>No</strong> — the page returns 404 and the CMS widget renders nothing. Pick this if you sell online only.<br/>
+<em>Note: the chat assistant only suggests showrooms if you've seeded locations in the dashboard, so online-only stores naturally never see them either way.</em>
+                    ]]></comment>
+                </field>
+
+                <field id="url_path" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>URL Path</label>
+                    <comment><![CDATA[The URL slug for the store finder page, e.g. <code>store-finder</code>, <code>showrooms</code>, <code>stores</code>, <code>find-a-shop</code>, <code>store_locator</code>. Lowercase letters, numbers, hyphens (<code>-</code>) and underscores (<code>_</code>) only — anything else is stripped on save. Leave blank to use <code>store-finder</code>. The save will fail with a clear error if the path already belongs to a Magento module, CMS page, product, or category. <strong>Cache flush required after change.</strong>]]></comment>
+                    <!-- NO `<validate>` here on purpose. Magento's bundled
+                         frontend validators are each missing at least one of
+                         hyphen, underscore, or both: validate-code rejects
+                         hyphens (false negative — blocks legitimate slugs like
+                         `find-a-shop`), validate-identifier passes slashes and
+                         `.html` (false positive — slug then mismatches the
+                         backend-normalised value). The backend validator
+                         Idea89\Assistant\Model\Config\Backend\LocatorUrlPath
+                         is the single source of truth: it strips disallowed
+                         characters, rejects reserved slugs, and surfaces
+                         collisions with a named-entity error banner.
+                         Better to fail on submit with an accurate message
+                         than block on the client with a wrong one. -->
+                    <backend_model>Idea89\Assistant\Model\Config\Backend\LocatorUrlPath</backend_model>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="layout" translate="label comment" type="select" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Page Layout</label>
+                    <source_model>Idea89\Assistant\Model\Config\Source\StorefinderLayout</source_model>
+                    <comment>Fullwidth = edge-to-edge map (recommended); Boxed = max-width rounded card. Overrides the dashboard setting when not blank.</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="page_title" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>SEO Page Title</label>
+                    <comment>Browser tab + search-result title. Default: "Find a store".</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="meta_description" translate="label comment" type="textarea" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>SEO Meta Description</label>
+                    <comment>Shown in search results under the page title. Aim for 140–160 characters.</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="hero_eyebrow" translate="label comment" type="text" sortOrder="60" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Hero Eyebrow</label>
+                    <comment>Small label above the page title, e.g. "Showrooms", "Where to buy", "Visit a branch". Default: "Showrooms".</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="hero_h1" translate="label comment" type="text" sortOrder="70" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Hero Title (H1)</label>
+                    <comment>Main page heading. Default: "Find a store near you".</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="hero_subhead" translate="label comment" type="textarea" sortOrder="80" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Hero Subhead</label>
+                    <comment>One-line introduction below the title.</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="help_heading" translate="label comment" type="text" sortOrder="90" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Help Section Heading</label>
+                    <comment>The heading of the help block below the map.</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="help_body" translate="label comment" type="textarea" sortOrder="100" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Help Section Body</label>
+                    <comment>A short paragraph offering help. Often used to mention phone support or live chat.</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="help_cta_label" translate="label comment" type="text" sortOrder="110" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Help CTA Label</label>
+                    <comment>Button text below the help message, e.g. "Get in touch", "Contact us".</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="help_cta_url" translate="label comment" type="text" sortOrder="120" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Help CTA URL</label>
+                    <comment>Where the help button links to. Can be a relative URL (/contact), an external URL, or a mailto: link.</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+            </group>
+
             <!-- ── Advanced ────────────────────────────────── -->
             <group id="advanced" translate="label" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Advanced</label>

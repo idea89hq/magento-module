@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <idea89>
+            <locator>
+                <!-- All Store Locator field defaults. Merchants override
+                     these in Stores → Configuration → IDEA89 → Store Locator.
+                     Mirror these values in Model/LocatorConfig.php so the
+                     PHP fallback matches when scopeConfig returns null
+                     (e.g. on a fresh install before save). -->
+                <enabled>1</enabled>
+                <url_path>store-finder</url_path>
+                <layout></layout>
+                <page_title>Find a store</page_title>
+                <meta_description>Find your nearest store or showroom. Search by postcode or browse the map to plan your visit.</meta_description>
+                <hero_eyebrow>Showrooms</hero_eyebrow>
+                <hero_h1>Find a store near you</hero_h1>
+                <hero_subhead>Walk in, talk to a specialist, and try things before you buy. Use your postcode, share your location, or browse the map.</hero_subhead>
+                <help_heading>Can't find a store near you?</help_heading>
+                <help_body>Our team can point you to the nearest stockist, arrange a click &amp; collect, or guide you through ordering online.</help_body>
+                <help_cta_label>Get in touch</help_cta_label>
+                <help_cta_url>/contact</help_cta_url>
+            </locator>
+        </idea89>
+    </default>
+</config>
