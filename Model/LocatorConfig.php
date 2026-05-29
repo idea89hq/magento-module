@@ -184,7 +184,10 @@ class LocatorConfig
      */
     public function getContentVersion(string $scopeType = ScopeInterface::SCOPE_STORE, ?string $scopeCode = null): string
     {
-        return substr(md5(implode('|', [
+        // sha256, not md5, per the Magento coding standard (the standard
+        // forbids md5 across the board even for non-security hashes like
+        // this content-version key used purely to bust the FPC entry).
+        return substr(hash('sha256', implode('|', [
             $this->getUrlPath($scopeType, $scopeCode),
             $this->getLayoutOverride($scopeType, $scopeCode),
             $this->getPageTitle($scopeType, $scopeCode),

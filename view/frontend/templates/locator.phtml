@@ -292,7 +292,7 @@ $citiesLabel = $cityCount > 0 ? ((string) $cityCount . ' cities') : '—';
 }
 </style>
 
-<div class="idea89-storefinder-page" data-layout="<?= $block->escapeHtmlAttr($layoutMode) ?>" style="--sf-accent: <?= $brandColorAttr ?>;">
+<div class="idea89-storefinder-page" data-layout="<?= $block->escapeHtmlAttr($layoutMode) ?>" style="--sf-accent: <?= /* @noEscape */ $brandColorAttr ?>;">
   <header class="sf-hero">
     <div class="sf-hero-inner">
       <span class="sf-hero-eyebrow">
@@ -327,12 +327,12 @@ $citiesLabel = $cityCount > 0 ? ((string) $cityCount . ' cities') : '—';
     <div class="idea89-locator-host">
       <idea89-locator
         mode="standalone"
-        api-base="<?= $apiBase ?>"
-        api-key="<?= $apiKey ?>"
-        map-provider="<?= $mapProvider ?>"
-        <?php if ($mapKeyAttr !== null): ?>map-key="<?= $mapKeyAttr ?>"<?php endif; ?>
-        <?php if ($defaultCountryAttr !== null): ?>default-country-code="<?= $defaultCountryAttr ?>"<?php endif; ?>
-        nearest-results-count="<?= $nearestCount ?>"
+        api-base="<?= /* @noEscape */ $apiBase ?>"
+        api-key="<?= /* @noEscape */ $apiKey ?>"
+        map-provider="<?= /* @noEscape */ $mapProvider ?>"
+        <?php if ($mapKeyAttr !== null): ?>map-key="<?= /* @noEscape */ $mapKeyAttr ?>"<?php endif; ?>
+        <?php if ($defaultCountryAttr !== null): ?>default-country-code="<?= /* @noEscape */ $defaultCountryAttr ?>"<?php endif; ?>
+        nearest-results-count="<?= /* @noEscape */ $nearestCount ?>"
         default-radius-km="100"
       ></idea89-locator>
     </div>
@@ -346,7 +346,7 @@ $citiesLabel = $cityCount > 0 ? ((string) $cityCount . ' cities') : '—';
         <?= $block->escapeHtml($helpBody) ?>
       </p>
       <div class="sf-help-actions">
-        <a class="sf-help-btn" href="<?= $helpCtaUrlAttr ?>">
+        <a class="sf-help-btn" href="<?= /* @noEscape */ $helpCtaUrlAttr ?>">
           <span><?= $block->escapeHtml($helpCtaLabel) ?></span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M5 12h14M13 5l7 7-7 7"/>
@@ -362,18 +362,18 @@ $citiesLabel = $cityCount > 0 ? ((string) $cityCount . ' cities') : '—';
         let locator-google.js race ahead of locator.js, find globalThis.
         __idea89LocatorRegisterGoogle still undefined, and silently fail to
         register the Google adapter — leaving the locator on Stadia. */ ?>
-<script type="module" src="<?= $apiBase ?>/widget/v1/locator.js"></script>
+<script type="module" src="<?= /* @noEscape */ $apiBase ?>/widget/v1/locator.js"></script>
 <?php if ($mapProvider === 'google'): ?>
-<script type="module" src="<?= $apiBase ?>/widget/v1/locator-google.js"></script>
+<script type="module" src="<?= /* @noEscape */ $apiBase ?>/widget/v1/locator-google.js"></script>
 <?php endif; ?>
 
 <script>
 // Forward locator:analytics events to the existing analytics POST.
 document.querySelector('.idea89-locator-host')?.addEventListener('locator:analytics', function (e) {
   var detail = e.detail || {};
-  fetch('<?= $apiBaseJs ?>/widget/v1/analytics', {
+  fetch('<?= /* @noEscape */ $apiBaseJs ?>/widget/v1/analytics', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-IDEA89-Key': '<?= $apiKeyJs ?>' },
+    headers: { 'Content-Type': 'application/json', 'X-IDEA89-Key': '<?= /* @noEscape */ $apiKeyJs ?>' },
     body: JSON.stringify({ name: detail.name, properties: detail.properties, entry_point: 'store-finder' }),
     keepalive: true,
   }).catch(function () {});
