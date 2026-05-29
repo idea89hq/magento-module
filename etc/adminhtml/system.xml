@@ -224,6 +224,61 @@
                 </field>
             </group>
 
+            <!-- ── Order Tracking ──────────────────────────── -->
+            <group id="order_tracking" translate="label comment" type="text" sortOrder="28" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Order Tracking</label>
+                <comment><![CDATA[
+<div style="padding:10px 14px;margin:0 0 6px;background:#eef7ff;border:1px solid #b8dfff;border-radius:6px;color:#114b7a;font-size:13px;line-height:1.5;">
+  <strong style="color:#0b3a64;">Included on every plan.</strong> When a shopper asks "where is my order?" or similar, the chat assistant
+  surfaces a compact order card directly in the widget. Logged-in customers see their last few orders; guests provide an order number and email.
+</div>
+<div style="font-size:12.5px;color:#555;line-height:1.5;">
+  Order data is fetched from your Magento store directly by the shopper's browser — it never travels through the IDEA89 servers
+  or the AI model. Carrier tracking links open in a new tab. Customise the support fall-back below.
+</div>
+                ]]></comment>
+
+                <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Order Tracking</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>When No, the assistant won't surface an order card and the order endpoints under /idea89/orders/* refuse 404.</comment>
+                </field>
+
+                <field id="support_url" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Contact Support URL</label>
+                    <comment>Where the "Contact support" button on the order card sends shoppers. Can be a path (/contact), an absolute URL, or a mailto: link. Default: /contact.</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="support_label" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Contact Support Button Label</label>
+                    <comment>Text on the support button. Default: "Contact support".</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="max_recent_orders" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Max Recent Orders Shown</label>
+                    <comment>How many of the most recent orders to show a logged-in customer when they ask about their orders. 1–10. Default: 3.</comment>
+                    <validate>validate-digits validate-digits-range digits-range-1-10</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="show_tracking_button" translate="label comment" type="select" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Show Carrier Tracking Button</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>When Yes, the order card shows a "Track parcel" button that opens the carrier's tracking page in a new tab (when a carrier link is available). Set to No if you'd rather direct shoppers to the support button only.</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+            </group>
+
             <!-- ── Advanced ────────────────────────────────── -->
             <group id="advanced" translate="label" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Advanced</label>

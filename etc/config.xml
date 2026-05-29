@@ -22,6 +22,16 @@
                 <help_cta_label>Get in touch</help_cta_label>
                 <help_cta_url>/contact</help_cta_url>
             </locator>
+            <order_tracking>
+                <!-- Defaults for Stores → Configuration → IDEA89 → Order Tracking.
+                     Mirror these in Model/OrderTrackingConfig.php so a fresh
+                     install (before save) behaves the same as save-with-default. -->
+                <enabled>1</enabled>
+                <support_url>/contact</support_url>
+                <support_label>Contact support</support_label>
+                <max_recent_orders>3</max_recent_orders>
+                <show_tracking_button>1</show_tracking_button>
+            </order_tracking>
         </idea89>
     </default>
 </config>
