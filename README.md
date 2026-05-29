@@ -24,6 +24,8 @@ Turn your Magento storefront into a conversion machine. IDEA89 adds an AI-powere
 | **Real-time catalogue sync** | Products, variants, prices, stock levels, and reviews are synced automatically. Out-of-stock items are never recommended |
 | **Brand voice** | Configure your assistant's name, tone, and store context. It answers like a member of your team |
 | **Promotion awareness** | Active cart price rules are synced so the assistant can surface relevant discounts |
+| **In-chat order tracking** _(new in v1.1.1)_ | When a shopper asks "where is my order?" the assistant surfaces a compact order card right in the chat with status, items, and a carrier tracking link. Logged-in customers see their last 3 orders; guests verify with order number + email |
+| **Store Locator** _(new in v1.1.0)_ | Physical showroom finder with map, postcode search, hours, photos, and directions — in chat and on a dedicated `/store-finder` page (URL configurable) |
 | **Built-in analytics** | Track conversations, conversion rates, and top queries from the merchant dashboard |
 | **GDPR-ready** | EU-hosted, no customer data used for AI training, PII redaction before model calls |
 
@@ -85,6 +87,39 @@ Choose what gets synced to IDEA89:
 - **Categories** — so the assistant knows your catalogue structure
 - **CMS Pages** — About Us, FAQs, policies — the assistant can answer "what's your return policy?"
 - **Store Info** — store name and context description
+
+### Store Locator _(Pro plan and above)_
+
+Settings live under **Stores → Configuration → IDEA89 → Store Locator**. Twelve fields covering page behaviour and content:
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| **Enable Store Finder Page** | Yes | Master toggle for the locator page and CMS widget |
+| **URL Path** | `store-finder` | Pick any slug — `showrooms`, `branches`, `find-a-shop`. Save fails with a clear error if it collides with an existing CMS page, product, category, or module |
+| **Page Layout** | Use dashboard setting | Fullwidth (edge-to-edge map) or Boxed (max-width card) |
+| **SEO Page Title** + **Meta Description** | (sensible defaults) | Standard SEO control over the page head |
+| **Hero Eyebrow / Title / Subhead** | (sensible defaults) | Override the in-page copy without theme edits |
+| **Help Section Heading / Body / CTA Label / CTA URL** | "Contact us" → `/contact` | The help section below the map |
+
+The page also lives as a CMS widget — drop **IDEA89 Store Locator** into any CMS page or static block from the widget picker.
+
+Locations themselves are managed in the [IDEA89 dashboard](https://app.idea89.com) → Locator. The chat assistant uses them automatically when a shopper asks "where is your nearest store?"
+
+### Order Tracking _(every plan)_
+
+Settings live under **Stores → Configuration → IDEA89 → Order Tracking**. Five fields:
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| **Enable Order Tracking** | Yes | Master toggle. When **No**, the chat assistant won't surface an order card, and the order endpoints respond with `feature_disabled` |
+| **Contact Support URL** | `/contact` | Where the "Contact support" button on the order card sends shoppers — relative path, absolute URL, or `mailto:` |
+| **Contact Support Button Label** | "Contact support" | Match your tone — "Talk to us", "Email the team" |
+| **Max Recent Orders Shown** | 3 | How many recent orders to show a logged-in customer (1–10) |
+| **Show Carrier Tracking Button** | Yes | When **Yes**, surfaces a "Track parcel" button when a carrier tracking link is available |
+
+All fields support per-store-view scope. Online-only retailer? Set **Enable Order Tracking = No** on that store-view and the card never surfaces.
+
+See **[docs/order-tracking-guide.md](docs/order-tracking-guide.md)** for the full guide — privacy model, supported carriers, troubleshooting, and the order-card JSON shape.
 
 ### Advanced
 
