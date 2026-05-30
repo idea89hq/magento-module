@@ -11,6 +11,18 @@
             <tab>idea89</tab>
             <resource>Idea89_Assistant::config</resource>
 
+            <!-- ── About / brand strip ─────────────────────── -->
+            <!-- Always-visible banner above General: IDEA89 lightbulb,
+                 tagline, version pill, and trust links (docs / website /
+                 support / dashboard). AboutFieldset overrides the standard
+                 fieldset rendering so the group has NO collapsible header,
+                 NO label — just the brand strip. sortOrder 0 keeps it
+                 pinned to the top regardless of any future group ordering. -->
+            <group id="about" translate="label" type="text" sortOrder="0" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label/>
+                <frontend_model>Idea89\Assistant\Block\Adminhtml\System\Config\AboutFieldset</frontend_model>
+            </group>
+
             <!-- ── General ─────────────────────────────────── -->
             <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
                 <label>General</label>

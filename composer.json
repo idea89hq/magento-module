@@ -2,14 +2,15 @@
     "name": "idea89/magento2-assistant",
     "description": "AI shopping assistant for Magento 2 — answers product questions, recommends what to buy, surfaces promotions. 5-minute install.",
     "type": "magento2-module",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "license": "OSL-3.0",
     "homepage": "https://idea89.com",
     "authors": [
         {
-            "name": "4K Technologies",
-            "email": "hello@idea89.com",
-            "homepage": "https://idea89.com"
+            "name": "4K Technologies Ltd",
+            "email": "support@idea89.com",
+            "homepage": "https://idea89.com",
+            "role": "Developer"
         }
     ],
     "keywords": [
@@ -29,18 +30,20 @@
         "source": "https://github.com/idea89hq/magento-module"
     },
     "require": {
-        "php": ">=8.2",
-        "magento/framework": "*",
-        "magento/module-catalog": "*",
-        "magento/module-cms": "*",
-        "magento/module-config": "*",
-        "magento/module-csp": "*",
-        "magento/module-store": "*"
+        "php": "~8.1.0||~8.2.0||~8.3.0||~8.4.0",
+        "magento/framework": "103.0.*",
+        "magento/module-catalog": "104.0.*",
+        "magento/module-cms": "104.*",
+        "magento/module-config": "101.*||102.*",
+        "magento/module-csp": "100.*||101.*",
+        "magento/module-store": "101.*"
     },
     "autoload": {
         "files": ["registration.php"],
         "psr-4": {
             "Idea89\\Assistant\\": ""
         }
-    }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }
