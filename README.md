@@ -7,7 +7,7 @@ Turn your Magento storefront into a conversion machine. IDEA89 adds an AI-powere
 [![Packagist Version](https://img.shields.io/packagist/v/idea89/magento2-assistant)](https://packagist.org/packages/idea89/magento2-assistant)
 [![Packagist Downloads](https://img.shields.io/packagist/dt/idea89/magento2-assistant)](https://packagist.org/packages/idea89/magento2-assistant)
 [![Magento 2](https://img.shields.io/badge/Magento-2.4.6+-orange)](https://magento.com)
-[![PHP](https://img.shields.io/badge/PHP-8.1%E2%80%938.4-blue)](https://php.net)
+[![PHP](https://img.shields.io/badge/PHP-8.1%E2%80%938.5-blue)](https://php.net)
 [![License](https://img.shields.io/badge/License-OSL--3.0-green)](LICENSE)
 
 [![Coding Standard](https://github.com/idea89hq/magento-module/actions/workflows/coding-standard.yml/badge.svg)](https://github.com/idea89hq/magento-module/actions/workflows/coding-standard.yml)
@@ -43,9 +43,14 @@ Your catalogue is indexed with AI embeddings for semantic search. When a shopper
 ## Requirements
 
 - Magento 2.4.6 or later (Open Source, Adobe Commerce, or Adobe Commerce Cloud)
-- PHP 8.1, 8.2, 8.3, or 8.4 — practically, whichever your Magento install supports
-  (2.4.6 / 2.4.7 = PHP 8.1–8.3; 2.4.8+ = PHP 8.3–8.4). The module code is
-  forward-compatible across the whole range.
+- PHP 8.1, 8.2, 8.3, 8.4, or 8.5 — practically, whichever your Magento install
+  supports:
+  | Magento     | PHP range                          |
+  | ----------- | ---------------------------------- |
+  | 2.4.6       | 8.1, 8.2                           |
+  | 2.4.7       | 8.1, 8.2, 8.3                      |
+  | 2.4.8       | 8.2, 8.3, 8.4                      |
+  | 2.4.9       | 8.4, 8.5 (8.3 upgrade-only)        |
 - An IDEA89 account — [start your free trial](https://app.idea89.com/sign-up)
 
 ## Installation

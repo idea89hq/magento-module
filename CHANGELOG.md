@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-05-30
+
+### Added
+- **PHP 8.5 support.** Adobe Commerce 2.4.9 (GA 2026-05-15) officially
+  supports PHP 8.5 — composer.json `require.php` widened to
+  `~8.1.0||~8.2.0||~8.3.0||~8.4.0||~8.5.0`. Module code uses only
+  standard PHP 8.1+ syntax (typed properties, attributes, readonly,
+  `declare(strict_types=1)`) and was confirmed compatible against the
+  PHP 8.5 deprecation / removal list. The full Magento → PHP matrix is
+  now: 2.4.6 → 8.1/8.2; 2.4.7 → 8.1/8.2/8.3; 2.4.8 → 8.2/8.3/8.4;
+  2.4.9 → 8.4/8.5 (8.3 upgrade-only). README and MARKETPLACE.md updated.
+
+### Changed
+- README PHP badge `8.1–8.4` → `8.1–8.5`.
+
 ## [1.1.2] - 2026-05-30
 
 ### Added

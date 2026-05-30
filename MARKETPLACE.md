@@ -14,7 +14,7 @@ left in because it documents what reviewers will check).
 | Package URN            | `idea89/magento2-assistant`                                                        |
 | Version                | from `composer.json` `version` and `etc/module.xml` `setup_version` (must match)   |
 | Edition                | **Magento Open Source 2.4.x · Adobe Commerce on prem 2.4.x · Adobe Commerce Cloud** |
-| PHP compatibility      | 8.1 / 8.2 / 8.3 / 8.4 (from `composer.json require.php`) — module code is forward-compatible; the practical limit is whichever PHP version the host Magento install supports (2.4.6/2.4.7 = 8.1-8.3; 2.4.8+ = 8.3-8.4) |
+| PHP compatibility      | 8.1 / 8.2 / 8.3 / 8.4 / 8.5 (from `composer.json require.php`) — module code is forward-compatible; the practical limit is whichever PHP version the host Magento install supports (2.4.6 = 8.1-8.2; 2.4.7 = 8.1-8.3; 2.4.8 = 8.2-8.4; 2.4.9 = 8.4-8.5, plus 8.3 upgrade-only) |
 | Category               | **Marketing → Customer Engagement** (primary) · **Sales → Conversion** (secondary) |
 | Logo                   | `../branding/logo/png/idea89-icon-255.png` (Marketplace requires exactly 255×255)  |
 | Banner (1200×300)      | not yet produced — generate from `branding/logo/idea89-logo-horizontal.svg`        |
