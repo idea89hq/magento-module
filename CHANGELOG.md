@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.5] - 2026-06-07
+
+### Added
+- `sale_price` and `is_on_sale` in catalog sync payload, computed from
+  Magento's `special_price` / `special_from_date` / `special_to_date`.
+  Enables the IDEA89 `on_sale` shopper intent (e.g. "anything on sale?").
+
 ## [1.1.4] - 2026-06-07
 
 ### Added

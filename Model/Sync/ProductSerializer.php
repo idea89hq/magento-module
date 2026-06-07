@@ -151,7 +151,50 @@ class ProductSerializer
             'is_new'           => $isNew,
             'is_featured'      => $isFeatured,
             'bestseller_rank'  => $this->fetchBestsellerRank($productId, $storeId),
+            // Sale signal. special_price + special_from_date/special_to_date
+            // are Magento's native sale-pricing columns. is_on_sale is TRUE
+            // when special_price is set AND today's date falls within the
+            // window (either bound can be null = open-ended). Mirrors the
+            // is_new computation a few lines above.
+            'sale_price'       => $this->fetchSalePrice($product),
+            'is_on_sale'       => $this->isOnSale($product),
         ];
+    }
+
+    /**
+     * Return the Magento special_price for this product, or null if the
+     * special-price window is not currently active.
+     */
+    private function fetchSalePrice(ProductInterface $product): ?float
+    {
+        if (! $this->isOnSale($product)) {
+            return null;
+        }
+        $sale = $product->getData('special_price');
+        return ($sale !== null && (float) $sale > 0) ? (float) $sale : null;
+    }
+
+    /**
+     * is_on_sale: TRUE when special_price is set AND today falls within
+     * special_from_date / special_to_date (either bound may be null =
+     * open-ended).
+     */
+    private function isOnSale(ProductInterface $product): bool
+    {
+        $sale = $product->getData('special_price');
+        if ($sale === null || (float) $sale <= 0) {
+            return false;
+        }
+        $now    = new \DateTime();
+        $fromOk = true;
+        $toOk   = true;
+        if ($from = $product->getData('special_from_date')) {
+            $fromOk = $now >= new \DateTime($from);
+        }
+        if ($to = $product->getData('special_to_date')) {
+            $toOk = $now <= new \DateTime($to);
+        }
+        return $fromOk && $toOk;
     }
 
     /**
