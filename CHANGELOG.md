@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2026-06-07
+
+### Added
+- **Category names in catalog sync.** `ProductSerializer` now sends a
+  `category_names: string[]` field alongside the existing `category_path`
+  (which still carries the raw Magento category IDs joined by `" > "`).
+  The API stores lowercase trimmed names in its `category_slugs` column
+  and uses them for per-row category filtering — needed for queries like
+  "cheapest in living" to actually narrow to the right category. Without
+  this field the API's category filter is a silent no-op on Magento data
+  because the legacy `split_part(category_path, '/', 2)` derivation
+  expects slash-delimited names, not `>`-delimited IDs. Cached per
+  process to avoid repeat lookups across the sync batch.
+
 ## [1.1.3] - 2026-05-30
 
 ### Added

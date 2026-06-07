@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace Idea89\Assistant\Model\Sync;
 
+use Magento\Catalog\Api\CategoryRepositoryInterface;
 use Magento\Catalog\Api\Data\ProductInterface;
 use Magento\Catalog\Api\ProductAttributeRepositoryInterface;
 use Magento\Catalog\Model\Product\Type\AbstractType;
@@ -15,6 +16,7 @@ use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\ConfigurableProduct\Model\Product\Type\Configurable;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\ResourceConnection;
+use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 
@@ -25,12 +27,24 @@ class ProductSerializer
 {
     private const XML_PATH_URL_SUFFIX = 'catalog/seo/product_url_suffix';
 
+    /**
+     * Per-instance category-name cache. Magento sync runs serialize() once per
+     * product; categories repeat constantly (Living, Kitchen, etc.). One DB
+     * round-trip per ID per process is enough — Magento's CategoryRepository
+     * caches under the hood too, but keeping a local map avoids the
+     * per-product NoSuchEntity try/catch overhead.
+     *
+     * @var array<int, string|null> ID → lowercase trimmed name (null on miss)
+     */
+    private array $categoryNameCache = [];
+
     public function __construct(
         private readonly StoreManagerInterface $storeManager,
         private readonly ScopeConfigInterface $scopeConfig,
         private readonly ProductAttributeRepositoryInterface $attributeRepository,
         private readonly StockRegistryInterface $stockRegistry,
         private readonly ResourceConnection $resourceConnection,
+        private readonly CategoryRepositoryInterface $categoryRepository,
     ) {}
 
     public function serialize(ProductInterface $product): array
@@ -86,6 +100,7 @@ class ProductSerializer
         if (method_exists($product, 'getCategoryIds')) {
             $categoryIds = $product->getCategoryIds();
         }
+        $categoryNames = $this->resolveCategoryNames($categoryIds);
 
         $urlKey = ltrim((string) $product->getUrlKey(), '/');
         $url    = $baseUrl . '/' . $urlKey . $suffix;
@@ -120,6 +135,14 @@ class ProductSerializer
             'url'              => $url,
             'image_url'        => $this->getImageUrl($product, $baseUrl),
             'category_path'    => implode(' > ', $categoryIds),
+            // Lowercase trimmed category NAMES the product belongs to. The API
+            // filters per-row on these (see migration 0047 + retrieval.ts
+            // WHERE_CLAUSE). Without this field the API falls back to the
+            // legacy split_part on category_path, which doesn't parse
+            // Magento's ID-joined-by-`>` shape — silent no-op. Send every
+            // ancestor name so "cheapest in living" matches whether the
+            // product sits in Living, Living/Cushions, or Home/Living/Rugs.
+            'category_names'   => $categoryNames,
             'attributes'       => $this->extractAttributes($product),
             'variants'         => $this->extractVariants($product),
             'avg_rating'       => $reviews['avg_rating'],
@@ -129,6 +152,47 @@ class ProductSerializer
             'is_featured'      => $isFeatured,
             'bestseller_rank'  => $this->fetchBestsellerRank($productId, $storeId),
         ];
+    }
+
+    /**
+     * Resolve a list of Magento category IDs to lowercase trimmed names,
+     * deduped and sorted, ready to land in the API's `category_slugs TEXT[]`
+     * column. Skips the root category (Magento default ID 1) because every
+     * tree includes it and shippers don't say "I want something in 'default
+     * category'". Misses (deleted categories) drop silently.
+     *
+     * @param int[]|string[] $categoryIds
+     * @return string[]
+     */
+    private function resolveCategoryNames(array $categoryIds): array
+    {
+        $names = [];
+        foreach ($categoryIds as $id) {
+            $intId = (int) $id;
+            // Root category — Magento ships with ID 1 ("Default Category")
+            // at the top of every tree. Filtering by "default category" is
+            // meaningless to the shopper, so skip it.
+            if ($intId <= 1) {
+                continue;
+            }
+            if (!array_key_exists($intId, $this->categoryNameCache)) {
+                try {
+                    $category = $this->categoryRepository->get($intId);
+                    $rawName  = (string) $category->getName();
+                    $clean    = trim(mb_strtolower($rawName));
+                    $this->categoryNameCache[$intId] = $clean !== '' ? $clean : null;
+                } catch (NoSuchEntityException $e) {
+                    $this->categoryNameCache[$intId] = null;
+                }
+            }
+            $name = $this->categoryNameCache[$intId];
+            if ($name !== null) {
+                $names[$name] = true;
+            }
+        }
+        $list = array_keys($names);
+        sort($list);
+        return $list;
     }
 
     private function getImageUrl(ProductInterface $product, string $baseUrl): ?string

@@ -10,7 +10,8 @@ left in because it documents what reviewers will check).
 
 | Portal field           | Value / source                                                                     |
 | ---------------------- | ---------------------------------------------------------------------------------- |
-| Extension name         | **IDEA89 — AI Shopping Assistant**                                                 |
+| Extension name         | **AI Shopping Assistant for Magento 2** (post 2026-06-02 marketing-review rejection — Adobe flagged "IDEA89" in the title as a developer/company name. Vendor brand stays on the vendor record; title is descriptive + uses the "for Magento" trademark-policy phrasing) |
+| Short description      | **An AI shopping assistant for Magento 2, connecting a storefront to the idea89 service for natural-language product discovery, in-chat order tracking, and a Pro-tier store locator.** (130-ish chars, uses "for Magento" phrasing, no bolded extension name) |
 | Package URN            | `idea89/magento2-assistant`                                                        |
 | Version                | from `composer.json` `version` and `etc/module.xml` `setup_version` (must match)   |
 | Edition                | **Magento Open Source 2.4.x · Adobe Commerce on prem 2.4.x · Adobe Commerce Cloud** |
@@ -25,6 +26,47 @@ left in because it documents what reviewers will check).
 | Documentation URL      | https://idea89.com/docs                                                            |
 | Vendor                 | 4K Technologies Ltd                                                                |
 | Vendor contact email   | `support@idea89.com`                                                               |
+
+## Marketing review — 2026-06-02 rejection + resubmission checklist
+
+First submission (2026-05-30) cleared technical EQP but failed the **Marketing
+review** with six items. Updated content lives in `dist/description.html` (v2
+of the long description) and the table above (new title + short description).
+Items resolved:
+
+1. **Extension title** — was `IDEA89 AI Shopping Assistant`; Adobe read "IDEA89"
+   as a developer/company name. New title: **AI Shopping Assistant for Magento 2**.
+   Vendor brand still appears on the vendor record and inside the description
+   body; it just leaves the listing title. Update this in the Adobe portal field
+   directly — not in `description.html`.
+2. **Long description first heading removed** — the old `<h2>idea89 — Your
+   storefront, now fluent in shopper.</h2>` is gone. The new description opens
+   straight into the introductory paragraph about the integrated service.
+3. **No bolded extension name in body** — `<strong>idea89</strong>` style
+   emphasis on the extension name has been stripped throughout. The one
+   remaining bold-link to `idea89.com` is the integrated-service hyperlink that
+   Adobe's integration template requires.
+4. **"For Magento" trademark phrasing** — every reference rewritten:
+   `"This extension for Magento 2"`, `"module for Magento"`, etc. Search for
+   `"Magento extension"` / `"Magento module"` before resubmit; both should
+   return zero hits.
+5. **Integration template** — opening paragraph is now about the **idea89
+   service**, with the first mention turned into a bold hyperlink to
+   `idea89.com`. Second paragraph describes the extension/integration itself
+   with an explicit use-case example. Followed by an **Account &amp; Pricing**
+   `<h3>` block that states a separate account is required, sign-up link, free
+   trial, paid plans, contact email — all per Adobe's spec.
+6. **Features list** — moved up to sit immediately after `Account &amp; Pricing`,
+   under a `<h3>Features</h3>` heading, as a single `<ul>` bullet list.
+
+When resubmitting:
+
+- Paste `dist/description.html` body (between the SELECT FROM / SELECT TO
+  markers) into the Marketplace Long Description rich-text field.
+- Replace the portal **Extension Name** field value (see table above).
+- Replace the **Short Description** with the value in the table above.
+- Keep the same logo, banner, screenshots, EULA, support links — only the
+  marketing copy changed.
 
 ## EQP (Extension Quality Program) compliance status
 
