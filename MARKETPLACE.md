@@ -6,6 +6,32 @@ the codebase needs to be in. Not shipped to merchants (filtered out of the
 Composer dist tarball via `.gitattributes` if needed for size — currently
 left in because it documents what reviewers will check).
 
+## Per-upgrade routine (RUN THIS ON EVERY MODULE UPGRADE)
+
+Every time the module version is bumped, before publishing or submitting a new
+version to the Marketplace, run the standing release gate from the repo root:
+
+```bash
+scripts/magento-release-check.sh
+```
+
+It runs the automated slice of the EQP checklist below — version consistency
+(`composer.json` == `etc/module.xml` == `CHANGELOG` entry), no AI-authorship
+footprint, security greps (no `eval`/`system`/`exec`/raw `mysql_*`/hardcoded
+creds), copyright headers on every PHP file, "for Magento" trademark phrasing —
+and **builds + validates the submission zip** (`composer archive`, then checks
+it carries no `.gitignore`/`.gitattributes`/`.github`/build junk and that the
+archived `module.xml` version matches). It changes and pushes nothing; it exits
+non-zero on any failure and prints the remaining owner-only steps (publish +
+Adobe portal upload). The zip lands at `/tmp/idea89-magento2-assistant-<ver>.zip`.
+
+The upgrade sequence is therefore: **(1)** bump `composer.json` + `etc/module.xml`
++ add a `CHANGELOG` entry → **(2)** `scripts/magento-release-check.sh` (must pass)
+→ **(3)** `scripts/publish-magento.sh "…" vX.Y.Z` (owner, idea89hq account) →
+**(4)** upload the zip to the Adobe EQP portal as a new version (owner). The
+manual sections below are the source of truth for what the script cannot check
+(screenshots, banner, EULA paste, portal fields).
+
 ## Submission portal field map
 
 | Portal field           | Value / source                                                                     |
@@ -130,6 +156,13 @@ Maintained green by the `coding-standard.yml` GitHub Action (see badge in `READM
 
 ### What still needs human action before clicking submit
 
+- [ ] **Build the submission zip with `composer archive`, NOT `zip -r`.** Adobe EQP rejects archives containing `.gitignore`, `.gitattributes`, or `.github/` ("Deprecated File found. Please remove …" — caught on the v1.1.5 submission). The `.gitattributes` in this module already has the right `export-ignore` rules for all three; `composer archive` honors them. Recipe from the public-repo clone at the tag:
+      ```bash
+      cd ~/Repos/magento-module-public
+      git fetch --tags && git checkout vX.Y.Z
+      composer archive --format=zip --dir=/tmp --file=idea89-magento2-assistant-X.Y.Z
+      unzip -l /tmp/idea89-magento2-assistant-X.Y.Z.zip | grep -E '\.gitignore|\.gitattributes|/.github/' && echo "REJECT" || echo "OK"
+      ```
 - [ ] **Banner image (1200×300)**. Generate from `branding/logo/idea89-logo-horizontal.svg`. Adobe's portal validates the aspect; off-by-a-pixel rejects.
 - [ ] **Screenshots ≥ 3, ≤ 6**. Take at 1440×900: widget on PDP, widget on mobile, admin config, in-chat order tracking, store-locator card. Optional sixth: dashboard view at `https://app.idea89.com`.
 - [ ] **EULA document**. OSL-3.0 standard text is included as `LICENSE`; Adobe's portal requires also pasting it into the "Terms of Service" field of the listing.

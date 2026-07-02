@@ -15,6 +15,7 @@ use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Store\Model\StoreManagerInterface;
 use Idea89\Assistant\Model\OrderTrackingConfig;
+use Idea89\Assistant\Model\PersonalizationConfig;
 
 /**
  * GET /idea89/customer/me
@@ -38,7 +39,8 @@ class Me implements HttpGetActionInterface
         private readonly CustomerSession $customerSession,
         private readonly StoreManagerInterface $storeManager,
         private readonly OrderTrackingConfig $config,
-        private readonly RequestInterface $request
+        private readonly RequestInterface $request,
+        private readonly PersonalizationConfig $personalization
     ) {}
 
     public function execute(): ResultInterface
@@ -55,15 +57,54 @@ class Me implements HttpGetActionInterface
                 ->setData(['error' => 'cross_origin_forbidden']);
         }
 
-        // Master toggle — when order tracking is disabled the widget
-        // shouldn't even ask. We still respond 200 so the widget can
-        // gracefully fall back.
-        if (!$this->config->isEnabled()) {
-            return $result->setData(['logged_in' => false, 'feature_enabled' => false]);
+        // Resolve the shopper's session state unconditionally — both the
+        // order-tracking response and the identity token need it regardless
+        // of which features are enabled.
+        $isLoggedIn = $this->customerSession->isLoggedIn();
+
+        // Mint the identity token when personalization is enabled and both
+        // secrets are configured. Gated only on personalization — independent
+        // of order tracking so stores with personalization ON but order
+        // tracking OFF still receive a token. Token is null when
+        // personalization is off or credentials are missing — widget treats
+        // null as no identity.
+        $secret = $this->personalization->getSigningSecret();
+        $apiKey = $this->personalization->getApiKey();
+        $token = null;
+        if ($this->personalization->isEnabled() && $secret !== '' && $apiKey !== '') {
+            $now = time();
+            $payload = [
+                'magento_customer_id' => $isLoggedIn ? (string) $this->customerSession->getCustomerId() : null,
+                'customer_group_id'   => (int) $this->customerSession->getCustomerGroupId(),
+                'is_logged_in'        => $isLoggedIn,
+                'store_ref'           => $apiKey,
+                'iat'                 => $now,
+                'exp'                 => $now + 3600,
+            ];
+            $payloadB64 = rtrim(strtr(base64_encode(json_encode($payload)), '+/', '-_'), '=');
+            $macB64 = rtrim(strtr(base64_encode(hash_hmac('sha256', $payloadB64, $secret, true)), '+/', '-_'), '=');
+            $token = $payloadB64 . '.' . $macB64;
         }
 
-        if (!$this->customerSession->isLoggedIn()) {
-            return $result->setData(['logged_in' => false, 'feature_enabled' => true]);
+        // Master toggle — when order tracking is disabled the widget
+        // shouldn't ask for order details. We still respond 200 so the
+        // widget can gracefully fall back, and include the identity token
+        // so personalization remains functional even when order tracking
+        // is off.
+        if (!$this->config->isEnabled()) {
+            return $result->setData([
+                'logged_in'      => false,
+                'feature_enabled' => false,
+                'identity_token' => $token,
+            ]);
+        }
+
+        if (!$isLoggedIn) {
+            return $result->setData([
+                'logged_in'       => false,
+                'feature_enabled' => true,
+                'identity_token'  => $token,
+            ]);
         }
 
         $customer = $this->customerSession->getCustomer();
@@ -80,7 +121,8 @@ class Me implements HttpGetActionInterface
             // Email is hashed — used only for client-side analytics dedup,
             // never displayed. Truncate to 8 chars (still uniquely IDs
             // within any one customer's session).
-            'email_hash' => substr(hash('sha256', strtolower($email)), 0, 8),
+            'email_hash'     => substr(hash('sha256', strtolower($email)), 0, 8),
+            'identity_token' => $token,
         ]);
     }
 

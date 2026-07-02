@@ -2,3 +2,5 @@
 /.github         export-ignore
 /.gitignore      export-ignore
 /.gitattributes  export-ignore
+# Marketplace prep artifacts (release notes, long description) — never ship to merchants.
+/dist            export-ignore

@@ -291,6 +291,22 @@
                 </field>
             </group>
 
+            <!-- ── Personalization ─────────────────────────── -->
+            <group id="personalization" translate="label comment" type="text" sortOrder="29" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Personalization</label>
+                <comment><![CDATA[Lets Aria recognise logged-in customers and confirm live prices/stock. Paste the Signing Secret from your IDEA89 dashboard (Settings → Widget).]]></comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Personalization</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="signing_secret" translate="label comment" type="obscure" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Signing Secret</label>
+                    <comment>Server-side HMAC secret shared with IDEA89. Never exposed to the browser.</comment>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+
             <!-- ── Advanced ────────────────────────────────── -->
             <group id="advanced" translate="label" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Advanced</label>

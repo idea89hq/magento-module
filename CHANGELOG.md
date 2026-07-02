@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-01
+
+### Added
+- **Full product view (mini-PDP).** New `GET /idea89/product/mini?sku=|id=`
+  controller (`Controller/Product/Mini.php` + the `idea89_product_mini`
+  layout handle) renders the real Magento product-view page — media gallery,
+  price, configurable swatches, and the add-to-cart form with its JS — with
+  the site chrome (header/footer/breadcrumbs) stripped. The widget loads this
+  in a contained popup, so add-to-cart and swatches behave exactly like the
+  storefront PDP (same session, same form key, same AJAX). Gated on the module
+  being enabled and on the same visibility rules as the storefront PDP
+  (`canShow()` + website membership), so a product that is disabled, "Not
+  Visible Individually", or not assigned to the current website cannot be
+  rendered by guessing a SKU/id.
+- **Shopper personalization (opt-in).** New admin section under
+  Stores → Configuration → IDEA89 → **Personalization** (enable toggle + an
+  encrypted Signing Secret shared with the IDEA89 dashboard). When enabled:
+  - `GET /idea89/customer/me` mints a short-lived HMAC-signed identity token
+    (customer id / group / login state) that the widget forwards as an opaque
+    header. The browser cannot forge it, and the shopper's details never leave
+    the storefront — IDEA89 reads identity without receiving PII.
+  - `GET /idea89/products/live` (bearer-secret authed) returns live price and
+    stock for a set of SKUs so the assistant can confirm current pricing
+    server-to-server.
+
+  Both endpoints are inert until Personalization is enabled and the secret is
+  set, so existing installs are unaffected.
+
 ## [1.1.5] - 2026-06-07
 
 ### Added
