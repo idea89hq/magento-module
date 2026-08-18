@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-08-18
+
+### Fixed
+- Coupon expiry dates are now sent to IDEA89 as UTC timestamps with a `Z`
+  suffix (`gmdate('Y-m-d\TH:i:s\Z', ...)`) instead of the server's local
+  offset (`date('c')`, which yields e.g. `+01:00`). The API accepts only the
+  `Z` form, so on any store whose PHP timezone was not UTC, every cart price
+  rule that had an expiry date set was rejected on sync and the assistant
+  never mentioned that promotion. Rules with no expiry date were unaffected.
+  Affects both the save observer and the daily promo cron.
+
 ## [1.2.0] - 2026-07-01
 
 ### Added

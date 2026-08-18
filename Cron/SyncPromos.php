@@ -58,7 +58,7 @@ class SyncPromos
                 'external_id' => (string) $rule->getId(),
                 'code'        => $code,
                 'description' => $rule->getName() ?: $code,
-                'expires_at'  => $toDate ? date('c', strtotime($toDate . ' 23:59:59')) : null,
+                'expires_at'  => $toDate ? gmdate('Y-m-d\TH:i:s\Z', strtotime($toDate . ' 23:59:59')) : null,
                 'is_active'   => (bool) $rule->getIsActive(),
             ];
 
