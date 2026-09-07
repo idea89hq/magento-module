@@ -5,6 +5,116 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-09-07
+
+### Added
+- **Checkout experience setting.** A new **Checkout Experience** section,
+  Stores → Configuration → IDEA89 → Checkout Experience, adds an
+  **Assistant Checkout Mode** field with four options: "Off" sends a
+  shopper who says "checkout" to your cart page, exactly as the assistant
+  has always behaved; "Express handoff" is the shipped default, it shows a
+  basket summary in chat with one button straight to your checkout and
+  never touches your checkout itself; "Checkout in chat" opens your own
+  Magento checkout, your payment methods, your shipping rules, your
+  extensions, inside a panel over the chat; "Native checkout (beta)"
+  reimplements the checkout steps inside the chat panel, the assistant asks
+  for delivery details itself and places the order. Two more fields,
+  **Cart URL Path** (default `/checkout/cart/`) and **Checkout URL Path**
+  (default `/checkout/`), let you point the assistant at a non-default cart
+  or checkout page, for example a one-step-checkout extension's own URL.
+  The storefront now also publishes `window.__IDEA89_PLATFORM` and
+  `window.__IDEA89_CHECKOUT` (mode, cart path, checkout path, mini-checkout
+  path, form key, checkout bar flag), mirroring the WooCommerce plugin's
+  bootstrap contract so the widget uses one detection idiom everywhere.
+- **Chrome-free checkout for the assistant panel.** On "Checkout in chat",
+  `GET /idea89/checkout/mini` (`Controller/Checkout/Mini.php`) renders your
+  real Magento checkout, the same one-page checkout layout, the same
+  payment and shipping components, the same third-party extensions, with
+  the site header and footer stripped, for the chat widget to frame
+  same-origin. It honours your own settings first: one-page checkout must
+  be switched on, the basket must have items with no errors, and guest
+  checkout must be allowed unless the shopper is signed in. IDEA89 renders
+  nothing payment-related and never receives card data. A guard failure
+  returns a small same-origin page carrying a machine-readable error code
+  instead of redirecting, so the widget can fall back immediately rather
+  than waiting out its handshake timeout.
+- **Test Checkout Panel.** A new admin action next to Assistant Checkout
+  Mode, shown once you select "Checkout in chat", that checks your store
+  for anything likely to stop the framed checkout rendering before you
+  switch it on: Hyvä Checkout (blocks it outright), five one-step-checkout
+  extensions (Amasty, Mageplaza, IWD, Mirasvit, MageDelight), Magento's own
+  checkout module being disabled, five payment methods that redirect
+  shoppers off-site to pay (PayPal Express Checkout, Braintree PayPal,
+  Klarna, Adyen Hosted Payment Pages, Amazon Pay), guest checkout being
+  off, and reCAPTCHA on checkout. Run it before going live.
+- **postMessage bridge**, matching the WooCommerce and Magento 1 plugins'
+  contract exactly: `ready` and `resize` on the framed checkout, `success`
+  (with the order number, total and currency) on your real checkout
+  success page, and a same-origin error page carrying a machine-readable
+  code for every guard failure. The bridge only ever runs inside a frame,
+  so an ordinary, unframed checkout visit is completely unaffected by it
+  being present.
+- **Native checkout (beta) is a real, working rung too.** Selecting it
+  lets the assistant collect delivery details in the conversation and
+  place the order itself, over four new same-origin routes under
+  `/idea89/checkout`: `context` (read the basket), `address`, `method`
+  and `place`. The three that change the quote, `address`, `method` and
+  `place`, each validate Magento's own form key as their CSRF defence,
+  and all four routes are rate-limited on two dimensions at once: per
+  shopper session, 8 attempts per 10 minutes for placing an order and 30
+  for everything else, and per IP address, 24 and 90 over the same window
+  so that shoppers sharing an office or mobile connection do not exhaust
+  each other's allowance.
+  A new **Payment Methods the Assistant May Use** field is empty by
+  default, so a freshly switched-on store places no orders at all until
+  you explicitly tick which methods the assistant may use. Methods it
+  marks "works in chat" (cheque/money order, bank transfer, cash on
+  delivery, purchase order and free orders) complete without leaving the
+  conversation; anything else still sends the shopper to your real
+  checkout to pay.
+- **Agentic Commerce Protocol surface**, off by default. A new
+  **Agentic Commerce** area under Checkout Experience opens with a live
+  status panel explaining, in plain language, what turning this on does
+  for your store right now, then lets AI agents outside the widget,
+  ChatGPT and similar, find, and where a separate module supports it, buy
+  from your store. **Let AI agents shop your store** defaults to No:
+  turning it on publishes your catalog to those third parties, so it is
+  never switched on without you choosing it. Once on, **Publish the
+  Product Feed** (default Yes) serves your visible catalog, including
+  out-of-stock items flagged as such, at `/idea89/acp/feed.json`; disabled
+  products, products not visible individually, and products outside the
+  current website are never included. An optional **Agent Access Token**
+  gates the feed with a bearer token; left blank, the feed is public.
+  Five new routes under `/idea89/acp/checkout_sessions` accept agent
+  checkout requests, but IDEA89 itself never places an order or touches
+  payment: when a separate transactional module is installed (currently
+  Magebit's free Agentic Commerce module), the request is redirected to
+  it; otherwise every request is declined with a fixed, documented
+  message. This is separate from the Assistant Checkout Mode above and
+  works alongside any of those settings.
+- **Checkout Display, shared with your IDEA89 dashboard.** A new field,
+  Stores → Configuration → IDEA89 → Checkout Experience → **Checkout
+  Display**, shown when Assistant Checkout Mode is Native checkout. **Full
+  window** gives checkout the whole screen and hides the conversation behind
+  it; **In the chat** keeps checkout inside the assistant panel alongside the
+  conversation. Full window is the default and is how the assistant has
+  behaved so far, so nothing changes on upgrade.
+
+  This one setting lives in your IDEA89 account rather than in Magento, and
+  the dashboard has the same field. Changing it in either place changes it in
+  both, so the two screens cannot show you different answers. If IDEA89 cannot
+  be reached when you save, nothing is changed and Magento tells you why,
+  rather than storing a value your dashboard never learned about.
+
+- **Pinned checkout bar.** A new admin toggle, Stores → Configuration →
+  IDEA89 → Checkout Experience → **Pinned Checkout Bar**, defaulted ON. When
+  on, the assistant shows a full-width bar above its message box reading
+  "Checkout, N items, total" whenever the shopper's basket has items. It is new
+  persistent chrome, so it can be switched off per store even though it only
+  ever appears on a basket with something in it. Tapping it goes through the
+  same Assistant Checkout Mode already configured above; it is a second,
+  always-visible way to reach checkout, not a new checkout path.
+
 ## [1.2.1] - 2026-08-18
 
 ### Fixed

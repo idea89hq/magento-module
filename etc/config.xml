@@ -22,6 +22,39 @@
                 <help_cta_label>Get in touch</help_cta_label>
                 <help_cta_url>/contact</help_cta_url>
             </locator>
+            <checkout>
+                <!-- Defaults for Stores → Configuration → IDEA89 → Checkout
+                     Experience. Mirror these in Model/CheckoutConfig.php so a
+                     fresh install (before the first save) behaves the same as
+                     save-with-default. -->
+                        <!-- Tier 1 is the shipped default: it never touches the
+                     merchant's checkout, it only confirms the basket before
+                     handing over, and it is the rung that pays for itself with
+                     no compatibility risk. See the upgrade note in Task 0.3. -->
+                <mode>express</mode>
+                <cart_path>/checkout/cart/</cart_path>
+                <checkout_path>/checkout/</checkout_path>
+                <!-- The pinned checkout bar the widget docks above its
+                     composer. Defaults ON: the merchant asked for this
+                     feature and it only ever appears when the basket has
+                     items, but it is new persistent chrome, so it stays a
+                     real per-store toggle rather than being unconditional. -->
+                <checkout_bar_enabled>1</checkout_bar_enabled>
+                <!-- Render cache only. The real value lives in the merchant's
+                     IDEA89 account so the dashboard and the Magento admin
+                     cannot show different answers for the same setting; this
+                     is what the admin form falls back to when the API is
+                     unreachable, and the widget never reads it. -->
+                <checkout_ui>full</checkout_ui>
+                <!-- ACP is orthogonal to the mode ladder above. acp_enabled
+                     defaults OFF on purpose: unlike the ladder's express
+                     default, this publishes catalog data to third parties,
+                     and that is never a default a merchant should discover
+                     after the fact. acp_feed_enabled may default on since
+                     it only matters once acp_enabled is true. -->
+                <acp_enabled>0</acp_enabled>
+                <acp_feed_enabled>1</acp_feed_enabled>
+            </checkout>
             <order_tracking>
                 <!-- Defaults for Stores → Configuration → IDEA89 → Order Tracking.
                      Mirror these in Model/OrderTrackingConfig.php so a fresh

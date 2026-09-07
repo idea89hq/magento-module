@@ -13,9 +13,8 @@ use Magento\Sales\Api\Data\OrderItemInterface;
 use Magento\Framework\Pricing\PriceCurrencyInterface;
 
 /**
- * PII-safe serializer for Magento order objects. The Pattern A privacy
- * model (see docs/superpowers/specs/2026-05-28-order-tracking-design.md)
- * keeps order data in the shopper's browser ↔ merchant's storefront,
+ * PII-safe serializer for Magento order objects. The privacy model
+ * keeps order data in the shopper's browser and the merchant's storefront,
  * but the JSON shape the controllers return still needs to be strictly
  * minimal — even an XSS / open-tab attacker reading the response should
  * only see what the customer is allowed to know about themselves.

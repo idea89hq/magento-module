@@ -52,13 +52,6 @@ class ProductSerializer
         $store   = $this->storeManager->getStore();
         $baseUrl = rtrim((string) $store->getBaseUrl(), '/');
 
-        // Read the SEO URL suffix (typically ".html" or empty string)
-        $suffix = (string) $this->scopeConfig->getValue(
-            self::XML_PATH_URL_SUFFIX,
-            ScopeInterface::SCOPE_STORE,
-            $store->getId()
-        );
-
         /** @var \Magento\Catalog\Model\Product $product */
         // getFinalPrice() can return 0 for configurables when loaded via getList()
         // because price indexing isn't applied to collection results.
@@ -102,8 +95,7 @@ class ProductSerializer
         }
         $categoryNames = $this->resolveCategoryNames($categoryIds);
 
-        $urlKey = ltrim((string) $product->getUrlKey(), '/');
-        $url    = $baseUrl . '/' . $urlKey . $suffix;
+        $url = $this->getProductUrl($product, $baseUrl);
 
         $productId = (int) $product->getId();
         $storeId   = (int) $store->getId();
@@ -127,7 +119,7 @@ class ProductSerializer
             'product_type'     => (string) $product->getTypeId(),
             'sku'              => (string) $product->getSku(),
             'name'             => (string) $product->getName(),
-            'description'      => strip_tags((string) ($product->getData('description') ?? '')),
+            'description'      => $this->getDescription($product),
             'price'            => $price !== null ? (float) $price : null,
             'currency'         => (string) ($store->getCurrentCurrencyCode() ?: 'GBP'),
             'in_stock'         => $stockItem->getProductId() ? (bool) $stockItem->getIsInStock() : true,
@@ -238,7 +230,12 @@ class ProductSerializer
         return $list;
     }
 
-    private function getImageUrl(ProductInterface $product, string $baseUrl): ?string
+    /**
+     * Public so other read-only surfaces that describe this same catalog to a
+     * third party (Model/Acp/FeedBuilder.php) reuse this exact resolution
+     * instead of deriving image URLs a second way.
+     */
+    public function getImageUrl(ProductInterface $product, string $baseUrl): ?string
     {
         /** @var \Magento\Catalog\Model\Product $product */
         $image = $product->getData('thumbnail') ?? $product->getData('small_image');
@@ -246,6 +243,30 @@ class ProductSerializer
             return null;
         }
         return $baseUrl . '/media/catalog/product' . $image;
+    }
+
+    /**
+     * Public for the same reason as getImageUrl() above — Model/Acp/FeedBuilder.php
+     * reuses this rather than re-deriving the SEO URL shape.
+     */
+    public function getProductUrl(ProductInterface $product, string $baseUrl): string
+    {
+        $suffix = (string) $this->scopeConfig->getValue(
+            self::XML_PATH_URL_SUFFIX,
+            ScopeInterface::SCOPE_STORE,
+            $this->storeManager->getStore()->getId()
+        );
+        $urlKey = ltrim((string) $product->getUrlKey(), '/');
+        return $baseUrl . '/' . $urlKey . $suffix;
+    }
+
+    /**
+     * Public for the same reason as getImageUrl() above — Model/Acp/FeedBuilder.php
+     * reuses this rather than re-deriving the description field.
+     */
+    public function getDescription(ProductInterface $product): string
+    {
+        return strip_tags((string) ($product->getData('description') ?? ''));
     }
 
     /**

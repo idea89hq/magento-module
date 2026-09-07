@@ -40,7 +40,8 @@ class RemoteCfg
      *   count: int,
      *   brandColor: string|null,
      *   storefinderLayout: string,
-     *   locatorEnabled: bool
+     *   locatorEnabled: bool,
+     *   checkoutUi: string
      * }|null
      */
     private ?array $cached = null;
@@ -58,7 +59,8 @@ class RemoteCfg
      *   count: int,
      *   brandColor: string|null,
      *   storefinderLayout: string,
-     *   locatorEnabled: bool
+     *   locatorEnabled: bool,
+     *   checkoutUi: string
      * }
      */
     public function get(): array
@@ -79,6 +81,12 @@ class RemoteCfg
             // page that fails to load any locations. Pro+enterprise stores
             // get `true` from the cfg payload.
             'locatorEnabled' => false,
+            // The shipped presentation. An unreachable API must not silently
+            // move a store to the other mode.
+            'checkoutUi' => 'full',
+            // Empty means the API did not tell us, so the caller keeps what it
+            // already had rather than blanking a name the merchant set.
+            'assistantName' => '',
         ];
 
         $apiUrl = rtrim($this->config->getApiUrl(), '/');
@@ -109,6 +117,16 @@ class RemoteCfg
                         ? $cfg['storefinderLayout'] : 'fullwidth',
                     'locatorEnabled' => is_bool($cfg['locatorEnabled'] ?? null)
                         ? $cfg['locatorEnabled'] : false,
+                    // Read back so the admin form can show a change made in
+                    // the dashboard. Anything unrecognised, including an
+                    // older API that does not send the key at all, collapses
+                    // to the shipped presentation.
+                    'checkoutUi' => ($cfg['checkoutUi'] ?? null) === 'inline' ? 'inline' : 'full',
+                    'assistantName' => is_string($cfg['assistantName'] ?? null) ? $cfg['assistantName'] : '',
+                    // Only set when the API answered. The personalization
+                    // panel reports "unknown" on an absent key rather than
+                    // guessing at the other half's state.
+                    'personalizationEnabled' => (bool) ($cfg['personalizationEnabled'] ?? false),
                 ];
             }
         } catch (\Throwable $e) {

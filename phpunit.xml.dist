@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+    Local-only unit-test runner. Must be executed from the MAGENTO ROOT inside
+    the Warden container, not from this directory:
+
+      warden env exec php-fpm vendor/bin/phpunit \
+        -c app/code/Idea89/Assistant/phpunit.xml.dist
+
+    CI does not run this: magento/framework is served from repo.magento.com,
+    which needs composer auth keys the public workflow does not have. CI's
+    gate remains phpcs (Magento2 ruleset) + CodeQL.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="../../../../dev/tests/unit/framework/bootstrap.php"
+         colors="true"
+         failOnWarning="true"
+         cacheDirectory=".phpunit.cache">
+    <testsuites>
+        <testsuite name="Idea89 Assistant Unit Tests">
+            <directory>Test/Unit</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory suffix=".php">Model</directory>
+            <directory suffix=".php">Block</directory>
+        </include>
+    </source>
+</phpunit>

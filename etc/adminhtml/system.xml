@@ -40,7 +40,8 @@
 
                 <field id="assistant_name" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Assistant Name</label>
-                    <comment>Name shown in the chat widget header, e.g. "Aria" or "Shop Helper".</comment>
+                    <backend_model>Idea89\Assistant\Model\Config\Backend\AssistantName</backend_model>
+                    <comment><![CDATA[The name shown above the conversation, e.g. "Aria" or "Shop Helper". It is also how the assistant refers to itself when a shopper asks.<br/><br/><strong>Shared with your IDEA89 dashboard.</strong> This name is stored in your IDEA89 account rather than in Magento, so it is the same in both places. If IDEA89 cannot be reached when you save, nothing is changed and Magento will tell you so.]]></comment>
                 </field>
 
                 <field id="store_context" translate="label comment" type="textarea" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
@@ -116,7 +117,7 @@
   If you're on Starter, upgrade in your <a href="https://app.idea89.com/billing" target="_blank" rel="noopener" style="color:#5a4500;text-decoration:underline;">IDEA89 dashboard</a> to use these settings.
 </div>
 <div style="font-size:12.5px;color:#555;line-height:1.5;">
-  Online-only retailer? Set <strong>Enable Store Locator</strong> below to <em>No</em> — the page and chat-widget locator both disappear from your storefront.<br/>
+  Online-only retailer? Set <strong>Enable Store Locator</strong> below to <em>No</em> and the page and chat-widget locator both disappear from your storefront.<br/>
   All content fields fall back to sensible defaults when blank. Leave layout blank to inherit the global setting from your dashboard.<br/>
   Tip: you can embed the locator inside any CMS page via the <strong>IDEA89 Store Locator</strong> widget.
 </div>
@@ -126,15 +127,15 @@
                     <label>Enable Store Locator</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     <comment><![CDATA[
-<strong>Yes</strong> — the store finder page is live and the CMS widget renders.<br/>
-<strong>No</strong> — the page returns 404 and the CMS widget renders nothing. Pick this if you sell online only.<br/>
+<strong>Yes</strong>: the store finder page is live and the CMS widget renders.<br/>
+<strong>No</strong>: the page returns 404 and the CMS widget renders nothing. Pick this if you sell online only.<br/>
 <em>Note: the chat assistant only suggests showrooms if you've seeded locations in the dashboard, so online-only stores naturally never see them either way.</em>
                     ]]></comment>
                 </field>
 
                 <field id="url_path" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>URL Path</label>
-                    <comment><![CDATA[The URL slug for the store finder page, e.g. <code>store-finder</code>, <code>showrooms</code>, <code>stores</code>, <code>find-a-shop</code>, <code>store_locator</code>. Lowercase letters, numbers, hyphens (<code>-</code>) and underscores (<code>_</code>) only — anything else is stripped on save. Leave blank to use <code>store-finder</code>. The save will fail with a clear error if the path already belongs to a Magento module, CMS page, product, or category. <strong>Cache flush required after change.</strong>]]></comment>
+                    <comment><![CDATA[The URL slug for the store finder page, e.g. <code>store-finder</code>, <code>showrooms</code>, <code>stores</code>, <code>find-a-shop</code>, <code>store_locator</code>. Lowercase letters, numbers, hyphens (<code>-</code>) and underscores (<code>_</code>) only. Anything else is stripped on save. Leave blank to use <code>store-finder</code>. The save will fail with a clear error if the path already belongs to a Magento module, CMS page, product, or category. <strong>Cache flush required after change.</strong>]]></comment>
                     <!-- NO `<validate>` here on purpose. Magento's bundled
                          frontend validators are each missing at least one of
                          hyphen, underscore, or both: validate-code rejects
@@ -236,6 +237,118 @@
                 </field>
             </group>
 
+            <!-- ── Checkout Experience ─────────────────────── -->
+            <group id="checkout" translate="label comment" type="text" sortOrder="26" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Checkout Experience</label>
+                <comment><![CDATA[
+<div style="font-size:12.5px;color:#555;line-height:1.6;">
+  Choose how far the assistant carries a shopper towards a completed order. Each option below is a step up from the one before it. Pick one.<br/>
+  <strong>Agentic Commerce</strong> at the bottom is separate: it lets AI agents outside your store (for example ChatGPT) buy from you, and works alongside any option above.<br/>
+  <strong>Cache flush required after any change here.</strong>
+</div>
+                ]]></comment>
+
+                <field id="mode" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Assistant Checkout Mode</label>
+                    <source_model>Idea89\Assistant\Model\Config\Source\CheckoutMode</source_model>
+                    <comment><![CDATA[
+<strong>Off</strong>: when a shopper says &ldquo;checkout&rdquo;, the assistant sends them to your cart page. This is how the assistant has always behaved.<br/>
+<strong>Express handoff</strong>: the assistant shows a basket summary in the chat and one button that goes straight to your checkout, skipping the cart page. No change to your checkout at all.<br/>
+<strong>Checkout in chat</strong>: your own Magento checkout opens inside a panel over the chat. Your payment methods, your shipping rules, your extensions. IDEA89 never sees a card number. Run <em>Test Checkout Panel</em> below before switching this on.<br/>
+<strong>Native checkout (beta)</strong>: the assistant asks for delivery details in the conversation and places the order for you. Offline payment methods only unless you say otherwise. Best suited to trade and invoice-billed stores.
+                    ]]></comment>
+                </field>
+
+                <field id="cart_path" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Cart URL Path</label>
+                    <comment><![CDATA[Leave blank for Magento's default <code>/checkout/cart/</code>. Change only if an extension has moved your cart page.]]></comment>
+                </field>
+
+                <field id="checkout_path" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Checkout URL Path</label>
+                    <comment><![CDATA[Leave blank for Magento's default <code>/checkout/</code>. One-step-checkout extensions often use their own path, e.g. <code>/onestepcheckout/</code>.]]></comment>
+                    <depends>
+                        <field id="mode" separator="|">express|embedded</field>
+                    </depends>
+                </field>
+
+                <field id="test_panel" translate="label comment" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Test Checkout Panel</label>
+                    <frontend_model>Idea89\Assistant\Block\Adminhtml\TestCheckoutPanelButton</frontend_model>
+                    <comment>Checks your theme, extensions and payment methods for anything that stops the checkout rendering inside the assistant. Run this before switching the mode to "Checkout in chat".</comment>
+                    <depends>
+                        <field id="mode">embedded</field>
+                    </depends>
+                </field>
+
+                <field id="checkout_bar_enabled" translate="label comment" type="select" sortOrder="45" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Pinned Checkout Bar</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment><![CDATA[Shows a full-width "Checkout &middot; N items &middot; total" bar above the message box whenever the shopper's basket has items. Works alongside the Assistant Checkout Mode above and routes through the same checkout. It just gives the shopper a second, always-visible way to reach it. Hidden automatically on an empty basket.]]></comment>
+                </field>
+
+                <field id="checkout_ui" translate="label comment" type="select" sortOrder="47" showInDefault="1" showInWebsite="0" showInStore="0" canRestore="0">
+                    <label>Checkout Display</label>
+                    <source_model>Idea89\Assistant\Model\Config\Source\CheckoutUi</source_model>
+                    <backend_model>Idea89\Assistant\Model\Config\Backend\CheckoutUi</backend_model>
+                    <comment><![CDATA[<strong>Shared with your IDEA89 dashboard.</strong> This setting is stored in your IDEA89 account rather than in Magento, so it is the same value in both places: changing it here updates your dashboard, and changing it in the dashboard updates this field. If IDEA89 cannot be reached when you save, nothing is changed and Magento will tell you so.<br/><br/><strong>Full window</strong> gives checkout the whole screen and hides the conversation behind it. <strong>In the chat</strong> keeps checkout inside the assistant panel alongside the conversation.]]></comment>
+                    <depends>
+                        <field id="mode" separator=",">native</field>
+                    </depends>
+                </field>
+
+                <field id="native_methods" translate="label comment" type="multiselect" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Payment Methods the Assistant May Use</label>
+                    <source_model>Idea89\Assistant\Model\Config\Source\NativePaymentMethods</source_model>
+                    <comment><![CDATA[
+<div style="padding:10px 14px;margin:0 0 6px;background:#fdecea;border:1px solid #f5c2c0;border-radius:6px;color:#611a15;font-size:13px;line-height:1.5;">
+  <strong>Beta.</strong> On this setting the assistant collects delivery details in the conversation and places the order itself. Start with an offline method and place a test order before offering it to shoppers.
+</div>
+Nothing is selected by default, which means the assistant will not place orders at all, so shoppers get the Express handoff instead. Methods marked <em>works in chat</em> complete without leaving the conversation. Anything else needs the shopper to go to your checkout page to pay, so selecting it gains you nothing here.
+                    ]]></comment>
+                    <depends>
+                        <field id="mode">native</field>
+                    </depends>
+                </field>
+
+                <!-- Agentic Commerce (ACP) is orthogonal to the mode ladder
+                     above: it lets AI agents OUTSIDE our widget (e.g.
+                     ChatGPT) discover and buy from the store over the
+                     Agentic Commerce Protocol. No <depends> on "mode" is
+                     deliberate — a store on "off" can still expose ACP. -->
+                <field id="acp_status" translate="label" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Agentic Commerce</label>
+                    <frontend_model>Idea89\Assistant\Block\Adminhtml\System\Config\AcpStatus</frontend_model>
+                </field>
+
+                <field id="acp_enabled" translate="label comment" type="select" sortOrder="61" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Let AI agents shop your store</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment><![CDATA[
+Publishes your catalog in the Agentic Commerce Protocol format so assistants such as ChatGPT can find and recommend your products. This is <strong>separate</strong> from the Assistant Checkout Mode above and works alongside any of those settings.<br/>
+Turning this on does not give anyone access to your orders, customers, or payment details.
+                    ]]></comment>
+                </field>
+
+                <field id="acp_feed_enabled" translate="label comment" type="select" sortOrder="62" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Publish the Product Feed</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment><![CDATA[Serves your visible products at <code>/idea89/acp/feed.json</code>, including out-of-stock ones, which are published flagged as out of stock rather than left out. Disabled products, products not visible individually, and products outside this website are never included.]]></comment>
+                    <depends>
+                        <field id="acp_enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="acp_secret" translate="label comment" type="obscure" sortOrder="63" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Agent Access Token</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment><![CDATA[A shared secret agents send as <code>Authorization: Bearer &lt;token&gt;</code>. Leave blank to serve the feed publicly (it contains only what is already on your product pages).]]></comment>
+                    <depends>
+                        <field id="acp_enabled">1</field>
+                    </depends>
+                </field>
+            </group>
+
             <!-- ── Order Tracking ──────────────────────────── -->
             <group id="order_tracking" translate="label comment" type="text" sortOrder="28" showInDefault="1" showInWebsite="1" showInStore="1">
                 <label>Order Tracking</label>
@@ -245,7 +358,7 @@
   surfaces a compact order card directly in the widget. Logged-in customers see their last few orders; guests provide an order number and email.
 </div>
 <div style="font-size:12.5px;color:#555;line-height:1.5;">
-  Order data is fetched from your Magento store directly by the shopper's browser — it never travels through the IDEA89 servers
+  Order data is fetched from your Magento store directly by the shopper's browser. It never travels through the IDEA89 servers
   or the AI model. Carrier tracking links open in a new tab. Customise the support fall-back below.
 </div>
                 ]]></comment>
@@ -295,9 +408,14 @@
             <group id="personalization" translate="label comment" type="text" sortOrder="29" showInDefault="1" showInWebsite="1" showInStore="1">
                 <label>Personalization</label>
                 <comment><![CDATA[Lets Aria recognise logged-in customers and confirm live prices/stock. Paste the Signing Secret from your IDEA89 dashboard (Settings → Widget).]]></comment>
-                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <field id="status" translate="label" sortOrder="5" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Personalization</label>
+                    <frontend_model>Idea89\Assistant\Block\Adminhtml\System\Config\PersonalizationStatus</frontend_model>
+                </field>
+                <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Enable Personalization</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment><![CDATA[This is the Magento half only. Personalization also has to be switched on in your IDEA89 dashboard before it runs. The panel above shows what both halves are currently doing.]]></comment>
                 </field>
                 <field id="signing_secret" translate="label comment" type="obscure" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Signing Secret</label>

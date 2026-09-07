@@ -37,7 +37,7 @@ manual sections below are the source of truth for what the script cannot check
 | Portal field           | Value / source                                                                     |
 | ---------------------- | ---------------------------------------------------------------------------------- |
 | Extension name         | **AI Shopping Assistant for Magento 2** (post 2026-06-02 marketing-review rejection — Adobe flagged "IDEA89" in the title as a developer/company name. Vendor brand stays on the vendor record; title is descriptive + uses the "for Magento" trademark-policy phrasing) |
-| Short description      | **An AI shopping assistant for Magento 2, connecting a storefront to the idea89 service for natural-language product discovery, in-chat order tracking, and a Pro-tier store locator.** (130-ish chars, uses "for Magento" phrasing, no bolded extension name) |
+| Short description      | **An AI shopping assistant for Magento 2, connecting a storefront to the idea89 service for natural-language product discovery, a configurable in-chat checkout, order tracking, and a Pro-tier store locator.** (uses "for Magento" phrasing, no bolded extension name) |
 | Package URN            | `idea89/magento2-assistant`                                                        |
 | Version                | from `composer.json` `version` and `etc/module.xml` `setup_version` (must match)   |
 | Edition                | **Magento Open Source 2.4.x · Adobe Commerce on prem 2.4.x · Adobe Commerce Cloud** |
@@ -140,8 +140,8 @@ Maintained green by the `coding-standard.yml` GitHub Action (see badge in `READM
 | No hard-coded credentials          | ✅      | API key entered by merchant, stored as `obscure` `Encrypted` field |
 | CSP headers respected              | ✅      | `etc/csp_whitelist.xml` configured                |
 | Output escapes via `$escaper`      | ✅      | `.phtml` templates use `$block->escapeHtml(...)` |
-| Frontend POSTs use CSRF tokens     | n/a    | no frontend POST endpoints in this module        |
-| No PII leaving the merchant origin | ✅      | order tracking is Pattern A (browser ↔ Magento)  |
+| Frontend POSTs use CSRF tokens     | ✅      | `Controller/Checkout/{Address,Method,Place}.php` implement `CsrfAwareActionInterface` and validate Magento's own form key |
+| No PII leaving the merchant origin | ✅      | order tracking and native checkout are both Pattern A (browser ↔ Magento); `Model/Checkout/Facade.php` never calls the IDEA89 API |
 | `SECURITY.md` with disclosure email | ✅      | `support@idea89.com`                             |
 
 ### Module scope hygiene
@@ -149,8 +149,8 @@ Maintained green by the `coding-standard.yml` GitHub Action (see badge in `READM
 | Check                                | Status | Notes                                          |
 | ------------------------------------ | ------ | ---------------------------------------------- |
 | No overriding of Magento core classes | ✅      | only observers + new blocks/controllers       |
-| No layout XML modifying core handles in destructive ways | ✅ | adds head-link only |
-| Sequence in `module.xml` declared    | ✅      | Catalog, Cms, Config, Csp, Store               |
+| No layout XML modifying core handles in destructive ways | ✅ | `default.xml` adds a head-link; `checkout_onepage_success.xml` adds one non-destructive block to `before.body.end` |
+| Sequence in `module.xml` declared    | ✅      | Catalog, Checkout, Cms, Config, Csp, Payment, Quote, Store |
 | Frontend assets namespaced           | ✅      | `Idea89_Assistant::js/...`                     |
 | Admin config tab uses unique ID      | ✅      | `<tab id="idea89">` + custom icon              |
 

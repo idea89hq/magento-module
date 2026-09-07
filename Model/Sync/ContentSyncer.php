@@ -13,6 +13,7 @@ use Magento\Cms\Model\ResourceModel\Page\CollectionFactory as PageCollectionFact
 use Magento\Store\Model\StoreManagerInterface;
 use Psr\Log\LoggerInterface;
 use Idea89\Assistant\Model\Config;
+use Idea89\Assistant\Model\RemoteCfg;
 use Idea89\Assistant\Model\Client\Idea89Client;
 
 /**
@@ -29,7 +30,8 @@ class ContentSyncer
         private readonly StoreManagerInterface $storeManager,
         private readonly Idea89Client $client,
         private readonly Config $config,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly RemoteCfg $remoteCfg
     ) {}
 
     public function syncAll(): void
@@ -78,7 +80,13 @@ class ContentSyncer
         $store       = $this->storeManager->getStore();
         $storeName   = $store->getName();
         $context     = $this->config->getStoreContext();
-        $assistantName = $this->config->getAssistantName();
+        // Prefer the account's name over the local row. The local row is a
+        // render cache that only heals when someone opens the admin form, so
+        // a name changed in the dashboard would otherwise be published into
+        // the prompt stale by the next cron run, and the assistant would go
+        // back to introducing itself as something the header does not say.
+        $remoteName = $this->remoteCfg->get()['assistantName'] ?? '';
+        $assistantName = $remoteName !== '' ? $remoteName : $this->config->getAssistantName();
 
         $body = trim(implode(' ', array_filter([
             $context,

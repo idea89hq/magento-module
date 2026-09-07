@@ -10,3 +10,7 @@ composer.lock
 
 # Logs
 *.log
+
+# PHPUnit local cache
+.phpunit.cache/
+.phpunit.result.cache

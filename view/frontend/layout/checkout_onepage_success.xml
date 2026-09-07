@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © 4K Technologies Ltd. All rights reserved.
+ * See LICENSE file for license details.
+ *
+ * Placing an order navigates the FRAME to checkout/onepage/success. That is a
+ * same-origin navigation inside our iframe, so the bridge block runs there and
+ * reports the order back to the chat widget.
+ *
+ * This handle is the merchant's real success page, reached by every shopper —
+ * framed or not. The bridge is inert outside a frame (it checks
+ * window.parent !== window) and inert unless the checkout mode is `embedded`,
+ * so ordinary checkout traffic is completely unaffected.
+ */
+ -->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceContainer name="before.body.end">
+            <!-- bridge_mode=success is what makes this render emit the
+                 `success` message rather than `ready` — see
+                 Block\Checkout\Bridge::getBridgeMode(). -->
+            <block class="Idea89\Assistant\Block\Checkout\Bridge" name="idea89.checkout.success.bridge">
+                <arguments>
+                    <argument name="bridge_mode" xsi:type="string">success</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+    </body>
+</page>

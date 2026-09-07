@@ -7,6 +7,8 @@ if (!$block->shouldRender()) {
 <?php
 $brandColor = $block->getBrandColor();
 ?>
+<?php /** @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer */ ?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', [], $block->getClientBootstrapJs(), false) ?>
 <script
     src="<?= $block->escapeUrl($block->getWidgetUrl()) ?>/widget/v1/<?= $block->escapeUrl($block->getApiKey()) ?>.js"
     data-key="<?= $block->escapeHtmlAttr($block->getApiKey()) ?>"

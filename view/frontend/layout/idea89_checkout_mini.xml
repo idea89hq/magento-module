@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © 4K Technologies Ltd. All rights reserved.
+ * See LICENSE file for license details.
+ */
+ -->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <!-- Pull in the merchant's ENTIRE real checkout — core blocks, their
+         payment method components, and anything a third-party extension has
+         added to this handle. Declarative on purpose: a PHP addHandle() call
+         would have to run before layout generation and is one more thing to
+         get wrong across Magento versions. -->
+    <update handle="checkout_index_index"/>
+
+    <body>
+        <!-- Detection marker for the widget and the admin compatibility test;
+             also the styling hook below. -->
+        <attribute name="class" value="idea89-mini-checkout"/>
+
+        <!-- Strip the site chrome. The checkout blocks and their JS are left
+             completely intact, so payment iframes, 3-D Secure challenges and
+             shipping estimation behave exactly as on the real checkout page. -->
+        <referenceContainer name="header.container" remove="true"/>
+        <referenceContainer name="footer-container" remove="true"/>
+        <referenceContainer name="navigation.sections" remove="true"/>
+        <referenceBlock name="catalog.topnav" remove="true"/>
+        <referenceBlock name="breadcrumbs" remove="true"/>
+        <referenceContainer name="page.bottom.container" remove="true"/>
+
+        <referenceContainer name="before.body.end">
+            <!-- bridge_mode is what tells this page apart from the success
+                 page — see Block\Checkout\Bridge::getBridgeMode(). Session
+                 state (last real order) is NOT reliable for that: it stays
+                 set from a shopper's previous purchase in the same browser
+                 session, including while they are back here for a second
+                 order. -->
+            <block class="Idea89\Assistant\Block\Checkout\Bridge" name="idea89.checkout.bridge">
+                <arguments>
+                    <argument name="bridge_mode" xsi:type="string">handshake</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+    </body>
+</page>

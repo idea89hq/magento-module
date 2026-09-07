@@ -1,0 +1,41 @@
+<?php
+/**
+ * Copyright © 4K Technologies Ltd. All rights reserved.
+ * See LICENSE file for license details.
+ *
+ * @var \Idea89\Assistant\Block\Checkout\Bridge $block
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+if (!$block->shouldRender()) {
+    return;
+}
+
+// Branch on the declared mode, not on payload nullity — bridge_mode is what
+// tells the success page from the mini-checkout page (see Bridge::getBridgeMode()
+// docblock for why session state alone can't be trusted for that). In success
+// mode with no payload (belt-and-braces case: the layout says success but no
+// real order is present), emit nothing at all rather than guessing.
+if ($block->getBridgeMode() === 'success') {
+    $successPayload = $block->getSuccessPayloadJson();
+    if ($successPayload === null) {
+        return;
+    }
+    $successJs = 'post(' . $successPayload . ');';
+} else {
+    $successJs = "post({source:'idea89-checkout',type:'ready'});"
+        . "var last=0;var send=function(){"
+        . "var h=Math.ceil(document.documentElement.scrollHeight);"
+        . "if(Math.abs(h-last)<12){return;}last=h;"
+        . "post({source:'idea89-checkout',type:'resize',height:h});};"
+        . "send();"
+        . "if(window.ResizeObserver){new ResizeObserver(send).observe(document.body);}"
+        . "else{setInterval(send,600);}";
+}
+
+$js = "(function(){"
+    . "if(window.parent===window){return;}"
+    . "var post=function(m){try{window.parent.postMessage(m,window.location.origin);}catch(e){}};"
+    . $successJs
+    . "})();";
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', [], $js, false) ?>

@@ -26,6 +26,8 @@ Turn your Magento storefront into a conversion machine. IDEA89 adds an AI-powere
 | **Promotion awareness** | Active cart price rules are synced so the assistant can surface relevant discounts |
 | **In-chat order tracking** _(new in v1.1.1)_ | When a shopper asks "where is my order?" the assistant surfaces a compact order card right in the chat with status, items, and a carrier tracking link. Logged-in customers see their last 3 orders; guests verify with order number + email |
 | **Store Locator** _(new in v1.1.0)_ | Physical showroom finder with map, postcode search, hours, photos, and directions — in chat and on a dedicated `/store-finder` page (URL configurable) |
+| **Configurable checkout** _(new in v1.3.0)_ | Choose how far the assistant carries a shopper: send them to your cart page, hand off to your checkout, open your checkout inside the chat panel, or have the assistant collect delivery details and place the order itself (beta). Express handoff is the default and never touches your checkout |
+| **Agentic Commerce** _(new in v1.3.0)_ | Publish your catalogue so AI shopping agents such as ChatGPT can find your products, off by default |
 | **Built-in analytics** | Track conversations, conversion rates, and top queries from the merchant dashboard |
 | **GDPR-ready** | EU-hosted, no customer data used for AI training, PII redaction before model calls |
 
@@ -94,6 +96,33 @@ Choose what gets synced to IDEA89:
 - **Categories** — so the assistant knows your catalogue structure
 - **CMS Pages** — About Us, FAQs, policies — the assistant can answer "what's your return policy?"
 - **Store Info** — store name and context description
+
+### Checkout Experience _(new in v1.3.0)_
+
+Settings live under **Stores → Configuration → IDEA89 → Checkout Experience**. Four options for how far the assistant carries a shopper towards a completed order:
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| **Assistant Checkout Mode** | Express handoff | "Off" sends shoppers to your cart page. "Express handoff" shows a basket summary in chat with one button to your checkout page; never touches your checkout itself. "Checkout in chat" frames your own Magento checkout inside the assistant panel. "Native checkout (beta)" has the assistant collect delivery details and place the order itself |
+| **Cart URL Path** | `/checkout/cart/` | Only needed if an extension has moved your cart page |
+| **Checkout URL Path** | `/checkout/` | Only needed if a one-step-checkout extension uses its own path. Shown for Express handoff and Checkout in chat |
+| **Test Checkout Panel** | n/a | Pre-flight check for Checkout in chat: flags Hyvä Checkout, one-step-checkout extensions, redirect-based payment methods, guest checkout being off, and reCAPTCHA on checkout |
+| **Pinned Checkout Bar** | Yes | Full-width "Checkout, N items, total" bar above the chat box whenever the basket has items |
+| **Payment Methods the Assistant May Use** | (none selected) | Native checkout only. Empty by default, so no orders are placed until you choose which methods the assistant may use |
+
+Native checkout talks to Magento over four same-origin routes under `/idea89/checkout` (`context`, `address`, `method`, `place`). The three that change the quote validate Magento's own form key as CSRF protection, and every one of the four is rate-limited per shopper session: order placement is capped at 8 attempts per session per 10 minutes, everything else at 30.
+
+#### Agentic Commerce _(new in v1.3.0)_
+
+Also under Checkout Experience, and independent of the checkout mode above. Lets AI shopping agents outside your widget, such as ChatGPT, find, and where a separate transactional module is installed, buy from your store.
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| **Let AI agents shop your store** | No | Publishes your catalogue to those third parties once turned on |
+| **Publish the Product Feed** | Yes | Serves your visible catalogue at `/idea89/acp/feed.json` once Agentic Commerce is on. Disabled products, products not visible individually, and products outside the current website are never included |
+| **Agent Access Token** | (blank) | Optional bearer token for the feed. Leave blank to serve it publicly |
+
+IDEA89 never places an order or touches payment on an agent's behalf: the five checkout-session routes under `/idea89/acp/checkout_sessions` redirect to a separately installed transactional module (currently Magebit's free Agentic Commerce module) when one is present, and decline with a fixed, documented message otherwise. See **[docs/agentic-commerce-guide.md](docs/agentic-commerce-guide.md)** for the setup guide.
 
 ### Store Locator _(Pro plan and above)_
 
@@ -195,6 +224,17 @@ No database tables are created in your Magento instance. All data is stored on t
 This module is licensed under the [Open Software License 3.0 (OSL-3.0)](https://opensource.org/licenses/OSL-3.0).
 
 Copyright 2026 4K Technologies Ltd.
+
+## Running unit tests
+
+Unit tests run inside a Magento install (they need `magento/framework`, which
+is not on public Packagist). From the Magento root:
+
+```bash
+vendor/bin/phpunit -c app/code/Idea89/Assistant/phpunit.xml.dist
+```
+
+CI runs `phpcs --standard=Magento2` and CodeQL only, for the same reason.
 
 ---
 
