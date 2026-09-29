@@ -135,6 +135,20 @@ class ContentSyncer
         return $items;
     }
 
+    /**
+     * Magento's stock CMS pages. None of them is merchant knowledge, and the
+     * privacy page ships as the placeholder "Please replace this text with
+     * you Privacy Policy" — the assistant was quoting all three to shoppers
+     * (idea89 2026-09-17). Matched by identifier so a merchant who rewrites
+     * the privacy page under a new identifier is synced normally; the API
+     * applies its own content check as a second line.
+     */
+    private const SKIP_IDENTIFIERS = [
+        'no-route',
+        'enable-cookies',
+        'privacy-policy-cookie-restriction-mode',
+    ];
+
     private function buildCmsPages(): array
     {
         $collection = $this->pageCollectionFactory->create();
@@ -142,9 +156,13 @@ class ContentSyncer
 
         $items = [];
         foreach ($collection as $page) {
+            if (in_array((string) $page->getIdentifier(), self::SKIP_IDENTIFIERS, true)) {
+                continue;
+            }
             $content = strip_tags((string) $page->getContent());
-            // Skip near-empty pages (nav blocks, cookie notices, etc.)
-            if (mb_strlen($content) < 80) {
+            // Skip near-empty pages (nav blocks, cookie notices, etc.) and
+            // the untouched privacy placeholder under any identifier.
+            if (mb_strlen($content) < 80 || stripos($content, 'replace this text with') !== false) {
                 continue;
             }
 
