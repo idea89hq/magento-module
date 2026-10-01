@@ -82,10 +82,20 @@ class CatalogSyncer
             } else {
                 $failed += count($batch);
                 $this->logger->error('IDEA89: batch failed', ['page' => $page]);
+                // Every later batch would be refused for the same reason.
+                if ($this->client->getSyncKeyRejection() !== null) {
+                    break;
+                }
             }
 
             $page++;
         } while (count($items) === self::BATCH_SIZE);
+
+        if ($this->client->getSyncKeyRejection() !== null) {
+            // Not a sync: leave "last synced" alone so the admin does not claim one happened.
+            $this->logger->error('IDEA89: catalog sync refused', ['reason' => $this->client->getSyncKeyRejection()]);
+            return;
+        }
 
         $this->configWriter->save(self::XML_PATH_LAST_SYNC, (string) time());
 

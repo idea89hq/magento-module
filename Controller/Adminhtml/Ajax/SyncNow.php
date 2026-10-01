@@ -14,6 +14,7 @@ use Magento\Framework\Controller\Result\JsonFactory;
 use Idea89\Assistant\Model\Sync\CatalogSyncer;
 use Idea89\Assistant\Model\Sync\ContentSyncer;
 use Idea89\Assistant\Model\Config;
+use Idea89\Assistant\Model\Client\Idea89Client;
 use Psr\Log\LoggerInterface;
 
 class SyncNow extends Action
@@ -26,7 +27,8 @@ class SyncNow extends Action
         private readonly CatalogSyncer $catalogSyncer,
         private readonly ContentSyncer $contentSyncer,
         private readonly Config $config,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly Idea89Client $client
     ) {
         parent::__construct($context);
     }
@@ -47,7 +49,17 @@ class SyncNow extends Action
                 $this->catalogSyncer->syncAll();
             }
 
-            $this->contentSyncer->syncAll();
+            // The syncers share this client, so a refusal over the sync key
+            // during the product sync is visible here. Content would be
+            // refused for the same reason; say why instead of "completed".
+            if ($this->client->getSyncKeyRejection() === null) {
+                $this->contentSyncer->syncAll();
+            }
+
+            $rejection = $this->client->getSyncKeyRejection();
+            if ($rejection !== null) {
+                return $result->setData(['ok' => false, 'error' => $rejection]);
+            }
 
             return $result->setData(['ok' => true, 'synced' => 'completed']);
         } catch (\Exception $e) {

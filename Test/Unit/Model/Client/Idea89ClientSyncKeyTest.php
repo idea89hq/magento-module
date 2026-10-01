@@ -69,4 +69,71 @@ class Idea89ClientSyncKeyTest extends TestCase
         $this->assertArrayNotHasKey('X-IDEA89-Sync-Key', $headers);
         $this->assertSame('k', $headers['X-IDEA89-Key'] ?? null);
     }
+
+    /**
+     * @param int[] $statuses one per request, in order
+     * @param string[] $bodies one per request, in order
+     */
+    private function withResponses(array $statuses, array $bodies, string $syncKey = 'sk'): Idea89Client
+    {
+        // Answer per request, however many times the client reads the response.
+        $curl = $this->createMock(Curl::class);
+        $request = -1;
+        $next = function () use (&$request): void {
+            $request++;
+        };
+        $curl->method('get')->willReturnCallback($next);
+        $curl->method('post')->willReturnCallback($next);
+        $curl->method('getStatus')->willReturnCallback(function () use (&$request, $statuses) {
+            return $statuses[$request];
+        });
+        $curl->method('getBody')->willReturnCallback(function () use (&$request, $bodies) {
+            return $bodies[$request];
+        });
+        $config = $this->createMock(Config::class);
+        $config->method('getSyncKey')->willReturn($syncKey);
+        return new Idea89Client(
+            $curl,
+            $config,
+            $this->createMock(LoggerInterface::class),
+            $this->createMock(ScopeConfigInterface::class)
+        );
+    }
+
+    public function testASyncKeyRefusalIsRecordedWithTheApiMessage(): void
+    {
+        $client = $this->withResponses([401], ['{"error":"sync_key_not_set","message":"Create a key under API & Domains."}']);
+
+        $this->assertFalse($client->upsertProducts([['external_id' => '1']], 'k', 'https://api.test'));
+        $this->assertSame('Create a key under API & Domains.', $client->getSyncKeyRejection());
+    }
+
+    public function testOtherFailuresAreNotMistakenForASyncKeyRefusal(): void
+    {
+        $client = $this->withResponses([500, 401], ['oops', '{"error":"invalid_api_key"}']);
+
+        $this->assertFalse($client->upsertContent([['type' => 'page']], 'k', 'https://api.test'));
+        $this->assertFalse($client->upsertStock([['external_id' => '1']], 'k', 'https://api.test'));
+        $this->assertNull($client->getSyncKeyRejection());
+    }
+
+    public function testConnectionReportsAMissingSyncKey(): void
+    {
+        $client = $this->withResponses(
+            [200, 401],
+            ['{"status":"ok"}', '{"error":"sync_key_required","message":"Paste the key into the plugin settings."}'],
+            ''
+        );
+
+        $result = $client->testConnection('k', 'https://api.test');
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('Paste the key into the plugin settings.', $result['error']);
+    }
+
+    public function testConnectionPassesWhenCatalogueAccessIsAccepted(): void
+    {
+        $this->assertSame(['ok' => true], $this->withResponses([200, 200], ['{}', '{"ok":true}'])->testConnection('k', 'https://api.test'));
+        // An API that predates /v1/catalog/verify: the health check stands.
+        $this->assertSame(['ok' => true], $this->withResponses([200, 404], ['{}', ''])->testConnection('k', 'https://api.test'));
+    }
 }

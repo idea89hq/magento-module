@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-10-01
+
+### Changed
+- **The catalogue sync key is now part of setup.** Stores created in IDEA89
+  from 1 October 2026 need it before their catalogue will sync, so the field
+  is no longer marked optional. Create it in your IDEA89 dashboard under
+  API & Domains and paste it into Stores → Configuration → IDEA89 → General
+  → Catalogue Sync Key.
+
+### Fixed
+- **Sync Now says why a sync was refused instead of reporting success.** When
+  IDEA89 turns a sync away because the sync key is missing or out of date,
+  Sync Now shows IDEA89's explanation, the full sync stops after the first
+  refused batch rather than sending every page, and "last synced" is not
+  updated. Previously the sync reported "completed" and the catalogue stayed
+  empty.
+- **Test Connection checks the sync key too.** It used to check only that
+  IDEA89 could be reached. It now asks IDEA89 whether a catalogue sync from
+  this store would be accepted, with nothing written, and reports a missing
+  or replaced sync key straight away.
+
+### Upgrade notes
+- Run `bin/magento setup:upgrade` and, in production mode,
+  `bin/magento setup:di:compile` (the Sync Now action has a new dependency).
+
 ## [1.3.1] - 2026-10-01
 
 ### Added

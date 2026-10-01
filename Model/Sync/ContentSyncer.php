@@ -69,6 +69,9 @@ class ContentSyncer
             $ok = $this->client->upsertContent($batch, $apiKey, $apiUrl);
             if (!$ok) {
                 $this->logger->error('IDEA89 ContentSyncer: batch failed');
+                if ($this->client->getSyncKeyRejection() !== null) {
+                    break;
+                }
             }
         }
 

@@ -19,6 +19,17 @@ class Idea89Client
     private const TIMEOUT = 15;
     private const BATCH_TIMEOUT = 60;
 
+    /** API error codes that mean "the catalogue sync key is the problem". */
+    private const SYNC_KEY_ERRORS = ['sync_key_not_set', 'sync_key_required', 'invalid_sync_key'];
+
+    /**
+     * Set when a catalogue write was refused because of the sync key, holding
+     * the API's merchant-facing message. The write methods still just return
+     * false (observers call them during admin saves and must never throw);
+     * full syncs check this to stop early, and Sync Now shows it.
+     */
+    private ?string $syncKeyRejection = null;
+
     public function __construct(
         private readonly Curl $curl,
         private readonly Config $config,
@@ -44,6 +55,43 @@ class Idea89Client
             $this->curl->addHeader('X-IDEA89-Domain', $host);
         }
         $this->curl->addHeader('X-IDEA89-Site-Path', $this->sitePath($baseUrl));
+    }
+
+    /**
+     * The API's message from the last catalogue write refused over the sync
+     * key, or null when none has been refused by this client.
+     */
+    public function getSyncKeyRejection(): ?string
+    {
+        return $this->syncKeyRejection;
+    }
+
+    /**
+     * Remember a 401 whose error code is about the sync key. Any other failure
+     * (network, 5xx, validation) leaves the flag alone.
+     */
+    private function noteSyncKeyRejection(int $status): void
+    {
+        $message = $this->syncKeyErrorMessage($status, (string) $this->curl->getBody());
+        if ($message !== null) {
+            $this->syncKeyRejection = $message;
+        }
+    }
+
+    private function syncKeyErrorMessage(int $status, string $body): ?string
+    {
+        if ($status !== 401) {
+            return null;
+        }
+        $data = json_decode($body, true);
+        if (!is_array($data) || !in_array($data['error'] ?? null, self::SYNC_KEY_ERRORS, true)) {
+            return null;
+        }
+        $message = is_string($data['message'] ?? null) ? trim($data['message']) : '';
+        return $message !== '' ? $message : (string) __(
+            'Catalogue sync was refused (%1). Check the Catalogue sync key field.',
+            $data['error']
+        );
     }
 
     /**
@@ -113,6 +161,7 @@ class Idea89Client
                 'response' => substr((string) $this->curl->getBody(), 0, 500),
                 'product_count' => count($products),
             ]);
+            $this->noteSyncKeyRejection($status);
             return false;
         }
 
@@ -146,6 +195,7 @@ class Idea89Client
                 'response'   => substr((string) $this->curl->getBody(), 0, 500),
                 'item_count' => count($items),
             ]);
+            $this->noteSyncKeyRejection($status);
             return false;
         }
 
@@ -179,6 +229,7 @@ class Idea89Client
                 'response'    => substr((string) $this->curl->getBody(), 0, 500),
                 'promo_count' => count($promos),
             ]);
+            $this->noteSyncKeyRejection($status);
             return false;
         }
 
@@ -213,6 +264,7 @@ class Idea89Client
                 'response'   => substr((string) $this->curl->getBody(), 0, 500),
                 'item_count' => count($items),
             ]);
+            $this->noteSyncKeyRejection($status);
             return false;
         }
 
@@ -295,11 +347,46 @@ class Idea89Client
         $this->curl->get($url);
 
         $status = $this->curl->getStatus();
-        if ($status === 200) {
+        if ($status !== 200) {
+            $this->logger->warning('IDEA89: connection test failed', ['status' => $status]);
+            return ['ok' => false, 'error' => __('API returned status %1. Check your API key.', $status)->render()];
+        }
+
+        return $this->verifyCatalogAccess($apiKey, $apiUrl);
+    }
+
+    /**
+     * Ask the API whether a catalogue sync from this store would be accepted:
+     * API key, store address and sync key, the same checks a real sync gets,
+     * with nothing written. /health alone cannot tell, so without this a
+     * missing sync key only showed up as an empty catalogue.
+     */
+    private function verifyCatalogAccess(string $apiKey, string $apiUrl): array
+    {
+        $this->curl->setTimeout(self::TIMEOUT);
+        $this->curl->addHeader('Content-Type', 'application/json');
+        $this->curl->addHeader('X-IDEA89-Key', $apiKey);
+        $this->addDomainHeader();
+        $this->addSyncKeyHeader();
+        $this->curl->post($apiUrl . '/v1/catalog/verify', '{}');
+
+        $status = $this->curl->getStatus();
+        // 404: an API older than this module; the health check already passed.
+        if ($status === 200 || $status === 404) {
             return ['ok' => true];
         }
 
-        $this->logger->warning('IDEA89: connection test failed', ['status' => $status]);
-        return ['ok' => false, 'error' => __('API returned status %1. Check your API key.', $status)->render()];
+        $body = (string) $this->curl->getBody();
+        $this->logger->warning('IDEA89: catalogue access check failed', [
+            'status' => $status,
+            'response' => substr($body, 0, 500),
+        ]);
+        $syncKeyMessage = $this->syncKeyErrorMessage($status, $body);
+        if ($syncKeyMessage !== null) {
+            return ['ok' => false, 'error' => __('Connected, but catalogue sync will be refused: %1', $syncKeyMessage)->render()];
+        }
+        $data = json_decode($body, true);
+        $code = is_array($data) && is_string($data['error'] ?? null) ? $data['error'] : (string) $status;
+        return ['ok' => false, 'error' => __('Connected, but the API refused this store (%1). Check your API key.', $code)->render()];
     }
 }
