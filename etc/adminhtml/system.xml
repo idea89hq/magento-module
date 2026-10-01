@@ -38,6 +38,12 @@
                     <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
                 </field>
 
+                <field id="sync_key" translate="label comment" type="obscure" sortOrder="25" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Catalog Sync Key (optional)</label>
+                    <comment>Optional. If you generated a catalog sync key in your IDEA89 dashboard, paste it here and it is sent with every catalog update. Leave blank if you have not generated one.</comment>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                </field>
+
                 <field id="assistant_name" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Assistant Name</label>
                     <backend_model>Idea89\Assistant\Model\Config\Backend\AssistantName</backend_model>

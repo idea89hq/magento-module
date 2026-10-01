@@ -47,6 +47,19 @@ class Idea89Client
     }
 
     /**
+     * Add X-IDEA89-Sync-Key for catalog writes when the merchant has set one.
+     * Nothing is added when it is unset, so behaviour is unchanged (and an
+     * empty value would be dropped by libcurl anyway, see sitePath()).
+     */
+    private function addSyncKeyHeader(): void
+    {
+        $syncKey = $this->config->getSyncKey();
+        if ($syncKey !== '') {
+            $this->curl->addHeader('X-IDEA89-Sync-Key', $syncKey);
+        }
+    }
+
+    /**
      * Normalise a base URL's path to '/' (root) or '/segment'.
      *
      * DO NOT change the root value back to the empty string. Magento's
@@ -90,6 +103,7 @@ class Idea89Client
         $this->curl->addHeader('Content-Type', 'application/json');
         $this->curl->addHeader('X-IDEA89-Key', $apiKey);
         $this->addDomainHeader();
+        $this->addSyncKeyHeader();
         $this->curl->post($url, $body);
 
         $status = $this->curl->getStatus();
@@ -122,6 +136,7 @@ class Idea89Client
         $this->curl->addHeader('Content-Type', 'application/json');
         $this->curl->addHeader('X-IDEA89-Key', $apiKey);
         $this->addDomainHeader();
+        $this->addSyncKeyHeader();
         $this->curl->post($url, $body);
 
         $status = $this->curl->getStatus();
@@ -154,6 +169,7 @@ class Idea89Client
         $this->curl->addHeader('Content-Type', 'application/json');
         $this->curl->addHeader('X-IDEA89-Key', $apiKey);
         $this->addDomainHeader();
+        $this->addSyncKeyHeader();
         $this->curl->post($url, $body);
 
         $status = $this->curl->getStatus();
@@ -187,6 +203,7 @@ class Idea89Client
         $this->curl->addHeader('Content-Type', 'application/json');
         $this->curl->addHeader('X-IDEA89-Key', $apiKey);
         $this->addDomainHeader();
+        $this->addSyncKeyHeader();
         $this->curl->post($url, $body);
 
         $status = $this->curl->getStatus();

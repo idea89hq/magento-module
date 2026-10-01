@@ -14,6 +14,7 @@ use Magento\Framework\App\Request\InvalidRequestException;
 use Magento\Framework\App\RequestInterface;
 use Magento\Framework\Controller\ResultInterface;
 use Magento\Framework\Controller\Result\JsonFactory;
+use Magento\Framework\HTTP\PhpEnvironment\RemoteAddress;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Framework\Api\SearchCriteriaBuilder;
 use Magento\Store\Model\StoreManagerInterface;
@@ -33,8 +34,10 @@ use Psr\Log\LoggerInterface;
  * returns the SAME 404 response as "no such increment_id" to prevent
  * enumeration.
  *
- * Rate limit: 4 attempts/IP/hour via GuestLookupRateLimit; 429 with a
- * retry_after header when exhausted. The 429 response IS distinguishable
+ * Rate limit: GuestLookupRateLimit::LIMIT_PER_WINDOW (10) attempts per IP
+ * per hour; 429 with a retry_after header when exhausted. Every attempt
+ * counts, a successful match included: the bucket is never reset, or
+ * anyone holding one valid order could reset it between guesses. The 429 response IS distinguishable
  * from the 404 response (different status code) — acceptable because
  * the cap protects against brute force on the order_number space, which
  * a 404 mask wouldn't.
@@ -66,7 +69,8 @@ class Lookup implements HttpPostActionInterface, CsrfAwareActionInterface
         private readonly OrderTrackingConfig $config,
         private readonly GuestLookupRateLimit $rateLimit,
         private readonly RequestInterface $request,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly RemoteAddress $remoteAddress
     ) {}
 
     public function createCsrfValidationException(RequestInterface $request): ?InvalidRequestException
@@ -103,7 +107,11 @@ class Lookup implements HttpPostActionInterface, CsrfAwareActionInterface
         // Rate-limit BEFORE parsing input so an enumeration attacker
         // pays the cost on every attempt regardless of how malformed
         // their payloads are.
-        $ip = (string) $this->request->getClientIp();
+        // RemoteAddress, not $request->getClientIp(): the latter trusts a
+        // caller-supplied X-Forwarded-For with no proxy restriction, so a
+        // fresh header per request would mean a fresh bucket. Same reasoning
+        // as Controller/Checkout/Place::clientIp().
+        $ip = (string) $this->remoteAddress->getRemoteAddress();
         $gate = $this->rateLimit->check($ip);
         if (!$gate['allowed']) {
             $result->setHeader('Retry-After', (string) $gate['retry_after'], true);
@@ -114,13 +122,16 @@ class Lookup implements HttpPostActionInterface, CsrfAwareActionInterface
         // Body parse
         $raw = (string) $this->request->getContent();
         $body = json_decode($raw, true);
+        // Same 404 as "no such order": no response may tell a prober
+        // anything beyond "not found".
         if (!is_array($body)) {
-            return $result->setHttpResponseCode(400)
-                ->setData(['error' => 'invalid_body']);
+            return $result->setHttpResponseCode(404)
+                ->setData(['error' => 'order_not_found']);
         }
 
-        $incrementId = isset($body['increment_id']) ? (string) $body['increment_id'] : '';
-        $email = isset($body['email']) ? (string) $body['email'] : '';
+        $incrementId = isset($body['increment_id']) && is_scalar($body['increment_id'])
+            ? (string) $body['increment_id'] : '';
+        $email = isset($body['email']) && is_scalar($body['email']) ? trim((string) $body['email']) : '';
 
         // Coarse input validation. Strictly we could let the DB equality
         // be the only check, but bouncing obvious garbage early keeps the
@@ -156,19 +167,16 @@ class Lookup implements HttpPostActionInterface, CsrfAwareActionInterface
         }
         $order = reset($items);
 
-        // Compare emails case-insensitively. If they don't match, we
-        // return the same 404 — never reveal that the order exists.
-        $storedEmail = strtolower((string) $order->getCustomerEmail());
-        if ($storedEmail !== strtolower($email)) {
+        // Compare emails case-insensitively and in constant time. If they
+        // don't match, we return the same 404 — never reveal that the
+        // order exists.
+        $storedEmail = strtolower(trim((string) $order->getCustomerEmail()));
+        if (!hash_equals($storedEmail, strtolower($email))) {
             $this->logger->info('[idea89-orders-lookup] email_mismatch', ['increment_id' => $incrementId]);
             return $result->setHttpResponseCode(404)
                 ->setData(['error' => 'order_not_found']);
         }
 
-        // Successful match — clear the rate-limit bucket so this user
-        // can keep tracking other orders without bumping into the cap
-        // because of earlier typos.
-        $this->rateLimit->reset($ip);
         $this->logger->info('[idea89-orders-lookup] match', ['increment_id' => $incrementId]);
         return $result->setData([
             'order' => $this->sanitizer->sanitize($order, detail: true),

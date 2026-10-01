@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-10-01
+
+### Added
+- **Catalogue sync key.** New optional field, Stores → Configuration →
+  IDEA89 → General → Catalogue sync key (stored encrypted). Create the key
+  in your IDEA89 dashboard under API & Domains and paste it here. Once a
+  sync arrives with the key, IDEA89 accepts catalogue, price, offer and FAQ
+  updates for your store only when they carry it. Your API key is visible
+  in your storefront's page source; the sync key never leaves your server,
+  so nobody else can change what the assistant knows about your products.
+  Leaving the field empty keeps syncing exactly as before.
+
+### Security
+- **Guest order lookup can no longer be used to guess orders.** A
+  successful lookup no longer resets the per-visitor attempt limit (10 per
+  hour), so someone holding one real order number cannot keep guessing
+  others. The visitor's address now comes from the connection itself, not
+  from a forwarded header a caller can set. Emails are compared in constant
+  time, and malformed requests get the same "order not found" reply as a
+  wrong order number or email.
+
+### Upgrade notes
+- Run `bin/magento setup:upgrade` and, in production mode,
+  `bin/magento setup:di:compile` (the order lookup has a new dependency).
+
 ## [1.3.0] - 2026-09-07
 
 ### Added

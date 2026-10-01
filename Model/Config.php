@@ -20,6 +20,7 @@ class Config
 {
     private const XML_PATH_ENABLED        = 'idea89/general/enabled';
     private const XML_PATH_API_KEY        = 'idea89/general/api_key';
+    private const XML_PATH_SYNC_KEY       = 'idea89/general/sync_key';
     private const XML_PATH_ASSISTANT_NAME = 'idea89/general/assistant_name';
     private const XML_PATH_STORE_CONTEXT  = 'idea89/general/store_context';
     private const XML_PATH_API_URL        = 'idea89/advanced/api_url';
@@ -52,6 +53,20 @@ class Config
         // Magento encrypted values have the format "version:keyId:data" e.g. "0:3:base64..."
         // Plaintext values (set via config:set CLI) are returned as-is
         return preg_match('/^\d+:\d+:/', $value) ? $this->encryptor->decrypt($value) : $value;
+    }
+
+    /**
+     * Optional catalog sync key from the IDEA89 dashboard, sent as
+     * X-IDEA89-Sync-Key on catalog writes. Empty when unset, in which case
+     * the header is not sent at all. Stored encrypted, like the API key.
+     */
+    public function getSyncKey(string $scopeType = ScopeInterface::SCOPE_STORE, ?string $scopeCode = null): string
+    {
+        $value = trim((string) $this->scopeConfig->getValue(self::XML_PATH_SYNC_KEY, $scopeType, $scopeCode));
+        if ($value === '') {
+            return '';
+        }
+        return trim(preg_match('/^\d+:\d+:/', $value) ? (string) $this->encryptor->decrypt($value) : $value);
     }
 
     public function getAssistantName(string $scopeType = ScopeInterface::SCOPE_STORE, ?string $scopeCode = null): string
