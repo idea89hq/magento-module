@@ -55,6 +55,14 @@
                 <acp_enabled>0</acp_enabled>
                 <acp_feed_enabled>1</acp_feed_enabled>
             </checkout>
+            <sync>
+                <!-- CMS page sync is on for new installs (1.4.0+): policy,
+                     delivery and help pages are what the assistant answers
+                     store questions from. Existing installs that never saved
+                     this setting keep it off: Setup/Patch/Data/
+                     KeepContentSyncOnUpgrade writes their old value first. -->
+                <sync_cms>1</sync_cms>
+            </sync>
             <order_tracking>
                 <!-- Defaults for Stores → Configuration → IDEA89 → Order Tracking.
                      Mirror these in Model/OrderTrackingConfig.php so a fresh

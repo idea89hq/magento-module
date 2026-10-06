@@ -10,40 +10,30 @@ namespace Idea89\Assistant\Observer;
 
 use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
-use Psr\Log\LoggerInterface;
 use Idea89\Assistant\Model\Config;
-use Idea89\Assistant\Model\Client\Idea89Client;
+use Idea89\Assistant\Model\Sync\SyncQueue;
 
 /**
- * Pushes stock qty + in_stock to the API whenever a stock item is saved.
+ * Queues a product's stock for the drain cron whenever its stock item is
+ * saved (admin edit, import, a non-MSI order).
  *
- * Fires on cataloginventory_stock_item_save_after, which covers:
- *  - Order placement (qty decrement)
- *  - Admin manual qty / status edit
- *  - Import
- *  - MSI stores: Magento's InventoryCatalog module saves to the legacy stock item
- *    table after any MSI source-item change, so this observer fires there too.
- *
- * Both qty and is_in_stock are captured — is_in_stock can change independently
- * of qty (manual status override, backorder threshold, etc.).
+ * The stock is not read here: with multi-source inventory the salable
+ * quantity for this save is not up to date until after it, and reading it
+ * inside the save sent the previous quantity (found on a local store,
+ * 1.4.0). The drain cron, within a minute, sends the salable quantity for the
+ * product and, for a configurable child, for its variant inside each parent
+ * (StockPayloadBuilder). No HTTP call is made during the save.
  */
 class StockItemSaveAfter implements ObserverInterface
 {
     public function __construct(
-        private readonly Config        $config,
-        private readonly Idea89Client  $client,
-        private readonly LoggerInterface $logger
+        private readonly Config $config,
+        private readonly SyncQueue $queue,
     ) {}
 
     public function execute(Observer $observer): void
     {
         if (!$this->config->isEnabled()) {
-            return;
-        }
-
-        $apiKey = $this->config->getApiKey();
-        $apiUrl = $this->config->getApiUrl();
-        if (!$apiKey || !$apiUrl) {
             return;
         }
 
@@ -53,15 +43,6 @@ class StockItemSaveAfter implements ObserverInterface
             return;
         }
 
-        $payload = [[
-            'external_id' => (string) $item->getProductId(),
-            'in_stock'    => (bool) $item->getIsInStock(),
-            'stock_qty'   => (int) $item->getQty(),
-        ]];
-
-        $result = $this->client->upsertStock($payload, $apiKey, $apiUrl);
-        if (!$result) {
-            $this->logger->error('IDEA89: failed to sync stock for product ' . $item->getProductId());
-        }
+        $this->queue->push(SyncQueue::STOCK, [(int) $item->getProductId()]);
     }
 }

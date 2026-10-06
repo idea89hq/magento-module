@@ -112,6 +112,13 @@
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     <comment>Sends store name and context description to IDEA89.</comment>
                 </field>
+
+                <field id="excluded_attributes" translate="label comment" type="multiselect" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Excluded Attributes</label>
+                    <source_model>Idea89\Assistant\Model\Config\Source\ShopperFacingAttributes</source_model>
+                    <can_be_empty>1</can_be_empty>
+                    <comment><![CDATA[Product attributes not to send to IDEA89, such as display or admin settings that are marked visible on the storefront. Ones that look like settings are listed first; none is excluded until you select it. Run Sync Now after changing this.]]></comment>
+                </field>
             </group>
 
             <!-- ── Store Locator ───────────────────────────── -->

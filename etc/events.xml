@@ -5,6 +5,18 @@
         <observer name="idea89_product_saved"
                   instance="Idea89\Assistant\Observer\ProductSaved"/>
     </event>
+    <event name="catalog_product_delete_after">
+        <observer name="idea89_product_deleted"
+                  instance="Idea89\Assistant\Observer\ProductDeleted"/>
+    </event>
+    <event name="sales_order_place_after">
+        <observer name="idea89_order_stock_placed"
+                  instance="Idea89\Assistant\Observer\OrderStockChanged"/>
+    </event>
+    <event name="order_cancel_after">
+        <observer name="idea89_order_stock_cancelled"
+                  instance="Idea89\Assistant\Observer\OrderStockChanged"/>
+    </event>
     <event name="cataloginventory_stock_item_save_after">
         <observer name="idea89_stock_item_saved"
                   instance="Idea89\Assistant\Observer\StockItemSaveAfter"/>

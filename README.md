@@ -92,10 +92,23 @@ Navigate to **Stores > Configuration > IDEA89 > AI Shopping Assistant** in Magen
 
 Choose what gets synced to IDEA89:
 
-- **Products** — names, descriptions, prices, images, attributes, variants, stock, reviews
+- **Products** — names, short and long descriptions, prices (with the catalogue price rule a logged-out shopper gets, whether prices include tax, the tax rate, and tier prices for all groups), images, category paths, attributes, variants, stock, reviews
 - **Categories** — so the assistant knows your catalogue structure
-- **CMS Pages** — About Us, FAQs, policies — the assistant can answer "what's your return policy?"
+- **CMS Pages** — About Us, FAQs, policies — the assistant can answer "what's your return policy?" On by default for new installs from 1.4.0; an existing install keeps the setting it had.
 - **Store Info** — store name and context description
+
+#### Which attributes are sent _(1.4.0)_
+
+Every attribute a shopper can see or use on your storefront: those set to
+**Visible on Catalog Pages on Storefront**, **Use in Search**, **Use in
+Layered Navigation** or **Use in Search Results Layered Navigation**. Each is
+sent with its storefront label, input type, option labels (not ids) and those
+settings, so the assistant can filter on them ("oak", "under 120 cm wide",
+"vegan") and confirm a shopper's requirement from them. Each configurable
+child also sends its own values where they differ from its parent's.
+Platform fields (prices, images, URL keys, meta tags, design and status
+settings) are not sent as attributes. To keep an attribute out of the
+assistant, turn all four settings off for it.
 
 ### Checkout Experience _(new in v1.3.0)_
 
@@ -167,13 +180,30 @@ See **[docs/order-tracking-guide.md](docs/order-tracking-guide.md)** for the ful
 
 | Trigger | What happens |
 |---------|--------------|
-| **Product saved** | Changed product is queued and synced within 1 minute |
+| **Product saved** | Changed product is queued and synced within 1 minute; a product saved as disabled or not visible is removed from the assistant |
+| **Product deleted** | Removed from the assistant within 1 minute _(1.4.0)_ |
 | **Stock update** | Stock changes are synced within 1 minute |
+| **Order placed or cancelled** | The ordered products' salable stock is synced within 1 minute, including on multi-source inventory stores _(1.4.0)_ |
 | **Price rule saved** | Active promotions are synced immediately |
-| **Nightly cron** | Full catalogue re-sync as a safety net (configurable) |
+| **Nightly cron** | Full catalogue re-sync as a safety net (configurable); disabled and not-visible products are removed _(1.4.0)_ |
 | **Manual sync** | Click "Sync Now" in admin to push everything immediately |
 
 All syncs are idempotent — sending the same product twice is safe and expected.
+
+Products are read in the default store view, so labels, option labels and
+prices are the ones your storefront shows.
+
+**Compatibility.** 1.4.0 sends catalogue schema 2 (attribute list, tax basis,
+tier prices, category paths, variant stock). An IDEA89 API that predates
+schema 2 ignores the new fields and reads the ones earlier versions sent, so
+the module works against either. Deletions use the delete endpoint every API
+version has.
+
+**On-demand product data** _(1.4.0)_. With personalisation enabled, IDEA89
+can ask your store for one product's full data by SKU, or search product
+names, through `POST /idea89/products/live` (server to server, authorised
+with the signing secret). It returns the same data the sync sends, for
+enabled products visible in the catalogue or search only.
 
 ## The widget
 

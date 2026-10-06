@@ -5,6 +5,128 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.4.0] - 2026-10-06
+
+### Added
+- **Product attributes with labels, types and settings.** Every attribute
+  that is visible on the storefront, searchable or used in layered
+  navigation is sent with its store-view label, input type, option labels
+  and those settings, so the assistant can filter on them and confirm a
+  shopper's requirement ("vegan", "under 120 cm wide") from them. Each
+  configurable child sends its own values where they differ from its
+  parent's, and its own stock quantity. Previously only searchable or
+  filterable attributes were sent, as codes with no labels.
+- **Tier prices, short description, category paths and tax basis.** Tier
+  prices for all customer groups or not-logged-in shoppers, the short
+  description, each category as its path of names, whether catalogue prices
+  include tax (Stores → Configuration → Sales → Tax → Calculation Settings →
+  Catalog Prices) and the product's tax rate at the store's default
+  destination.
+- **Deleted, disabled and hidden products leave the assistant.** A deleted
+  product is removed within a minute; a product saved as disabled or not
+  visible in the catalogue or search is removed instead of synced; the
+  nightly sync removes any that changed by mass action or import.
+- **On-demand product data.** `POST /idea89/products/live` also answers
+  `{"sku": "...", "full": true}` with one product's full data and
+  `{"search": "...", "limit": 5}` with up to ten matching products, in the
+  sync's format. The existing `{"skus": [...]}` request is unchanged.
+
+### Fixed
+- **A saved product now syncs within a minute.** The save queue was written
+  to `core_config_data` and read back through the config cache, which the
+  write never cleared, so a saved product waited for a cache flush or the
+  nightly sync. The queue is now in the flag table, read from the database;
+  ids an older version left at the old path are picked up once.
+- **Descriptions keep their line breaks.** Paragraphs and list items were
+  joined ("…with it.100% linen, 250 gsm50cm"); each block is now a line.
+- **Stock saves send the quantity after the save.** With multi-source
+  inventory the salable quantity read inside a stock-item save was the
+  previous one; the product is now queued and its salable quantity sent by
+  the drain cron within a minute (no HTTP call during the save).
+
+- **Test Connection says when the API cannot be reached.** A refused or
+  timed-out connection reached the admin as Magento's error page, and the
+  button showed "Unexpected non-whitespace character after JSON"; it now
+  shows the API address and the connection error.
+
+- **An unreachable API no longer breaks admin saves or stops a sync part-way.**
+  A refused connection, DNS failure or timeout threw out of every catalogue
+  write: saving a cart price rule failed with an error, and a cron stopped at
+  the first product. The write is now logged and counted as failed (the
+  nightly sync catches it up), and Sync Now says the API could not be reached
+  instead of reporting success.
+- **Changes the API could not take are retried the next minute.** When the
+  API is unreachable, rate-limited (408, 429) or erroring (5xx), the queued
+  saves, deletions and stock updates go back on the queue instead of waiting
+  for the nightly sync. After the first such failure the rest of the run is
+  queued again without being sent, so a down API costs one attempt a minute.
+  A product the API rejects (other 4xx) is not retried; the nightly sync
+  still covers it.
+- **Sync Now reports what it did.** It showed "Synced completed products"; it
+  now shows the products synced, hidden or disabled ones removed and any that
+  failed. A full sync that cannot reach the API stops at the first batch and
+  no longer records a "last synced" time.
+
+- **Configurable prices are sent as entered.** A configurable's own final
+  price is the storefront display amount, with tax added when prices are
+  shown including tax, while `price_includes_tax` said ex-tax. Its price is
+  now its cheapest child's that can be bought (rule prices applied).
+- **Only CMS pages shoppers can open are synced.** An active page assigned to
+  no store view (not on the storefront) was sent, and the assistant answered
+  from it. Pages are now those of the synced store view or all views, and
+  each content batch carries the ids of every page synced, so the API
+  withdraws pages that were unassigned, disabled or deleted (older APIs
+  ignore the list).
+- **Variant options carry their names.** Each variant's `option_labels`
+  gives the label shoppers see for each option code (the configurable
+  option's label, else the attribute's store label), so an option such as
+  "Heat and Massage Option" is not known to the assistant only by its code.
+- **Descriptions from Page Builder's HTML Code element are sent as text.**
+  That element stores its markup escaped, so tags arrived as text ("<P>...").
+- **The live endpoint's `skus` price matches the sync.** It returned a
+  configurable's display amount (with tax when prices are shown including
+  it), which the API then put in place of the synced price.
+- **Decimal attribute values are sent without the stored trailing zeros**
+  ("53.3", not "53.300000"); the raw value is unchanged.
+
+### Added
+- **Excluded Attributes** (Stores > Configuration > IDEA89 > Content Sync):
+  product attributes not to send, for display and admin settings a store has
+  marked visible on the storefront ("Hide Inc. VAT Price", panel colours,
+  search weighting). The list holds every attribute the sync sends; ones whose
+  code looks like a setting are listed first and marked, none is excluded
+  until selected. Excluded codes are left out for products, their variants
+  and the schema-1 map; run Sync Now after changing it.
+
+### Changed
+- **CMS page sync is on by default for new installs.** An existing install
+  that never saved the setting keeps it off (written explicitly on upgrade).
+- **Prices include a catalogue price rule for logged-out shoppers.** The
+  sync runs from cron, where Magento does not apply catalogue price rules to
+  the final price; the rule price is now read from the rule index.
+- **Stock after an order on multi-source inventory stores.** An order or a
+  cancellation now pushes the ordered products' salable quantity within a
+  minute. With MSI an order only places a reservation, so the stock-item
+  observer never fired and the quantity waited for the nightly run.
+- **Store view.** Products are read in the default store view (previously
+  the admin store), so labels and option labels match the storefront.
+- **The widget's design fonts are allowed by the content security policy.**
+  The Concierge and Aurora designs now load their fonts from the IDEA89 API
+  into the page itself, so the module adds the API host to `style-src` and
+  `font-src` alongside the existing `script-src`, `connect-src` and
+  `img-src` entries. Without it, a store that enforces its CSP shows the
+  fallback fonts; nothing else is affected.
+
+### Upgrade notes
+- Run `bin/magento setup:upgrade` (a data patch keeps your CMS sync
+  setting) and, in production mode, `bin/magento setup:di:compile`.
+- The module now declares the core modules it already used
+  (CatalogInventory, CatalogRule, ConfigurableProduct, Customer, Eav, Tax).
+- The first full sync after upgrading re-sends every product with the new
+  fields.
+
 ## [1.3.2] - 2026-10-01
 
 ### Changed

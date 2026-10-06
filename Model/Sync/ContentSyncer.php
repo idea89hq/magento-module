@@ -54,8 +54,11 @@ class ContentSyncer
             $items = array_merge($items, $this->buildCategories());
         }
 
+        $cmsPageIds = null;
         if ($this->config->isSyncCms()) {
-            $items = array_merge($items, $this->buildCmsPages());
+            $pages = $this->buildCmsPages();
+            $cmsPageIds = array_column($pages, 'external_id');
+            $items = array_merge($items, $pages);
         }
 
         if (empty($items)) {
@@ -66,7 +69,7 @@ class ContentSyncer
         $this->logger->info('IDEA89 ContentSyncer: syncing content items', ['count' => count($items)]);
 
         foreach (array_chunk($items, self::BATCH_SIZE) as $batch) {
-            $ok = $this->client->upsertContent($batch, $apiKey, $apiUrl);
+            $ok = $this->client->upsertContent($batch, $apiKey, $apiUrl, $cmsPageIds);
             if (!$ok) {
                 $this->logger->error('IDEA89 ContentSyncer: batch failed');
                 if ($this->client->getSyncKeyRejection() !== null) {
@@ -156,6 +159,11 @@ class ContentSyncer
     {
         $collection = $this->pageCollectionFactory->create();
         $collection->addFieldToFilter('is_active', 1);
+        // Only pages shoppers can open in the synced store view (or in all
+        // views). An active page assigned to no store view is not on the
+        // storefront, and its text was answered from as if it were.
+        $store = $this->storeManager->getDefaultStoreView() ?? $this->storeManager->getStore();
+        $collection->addStoreFilter((int) $store->getId(), true);
 
         $items = [];
         foreach ($collection as $page) {

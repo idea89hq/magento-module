@@ -10,9 +10,6 @@ namespace Idea89\Assistant\Model\Sync;
 
 use Magento\Catalog\Api\CategoryRepositoryInterface;
 use Magento\Catalog\Api\Data\ProductInterface;
-use Magento\Catalog\Api\ProductAttributeRepositoryInterface;
-use Magento\Catalog\Model\Product\Type\AbstractType;
-use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\ConfigurableProduct\Model\Product\Type\Configurable;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\ResourceConnection;
@@ -22,6 +19,14 @@ use Magento\Store\Model\StoreManagerInterface;
 
 /**
  * Converts a Magento product into the JSON shape expected by POST /v1/catalog/upsert.
+ *
+ * Schema 2 (module 1.4.0): alongside the schema-1 fields every IDEA89 API
+ * version accepts, a product carries its attribute list (labels, types,
+ * option labels, flags), short description, category paths as names, tier
+ * prices for any shopper, and the price's tax basis and rate; each
+ * configurable child carries its stock quantity and the attribute values it
+ * does not share with its parent. An API older than schema 2 ignores the new
+ * keys and keeps reading the schema-1 ones.
  */
 class ProductSerializer
 {
@@ -38,13 +43,17 @@ class ProductSerializer
      */
     private array $categoryNameCache = [];
 
+    /** @var array<int, string|null> ID → category path as names ("Garden > Benches"), null on miss */
+    private array $categoryPathCache = [];
+
     public function __construct(
         private readonly StoreManagerInterface $storeManager,
         private readonly ScopeConfigInterface $scopeConfig,
-        private readonly ProductAttributeRepositoryInterface $attributeRepository,
-        private readonly StockRegistryInterface $stockRegistry,
         private readonly ResourceConnection $resourceConnection,
         private readonly CategoryRepositoryInterface $categoryRepository,
+        private readonly AttributeExtractor $attributeExtractor,
+        private readonly PriceResolver $priceResolver,
+        private readonly StockResolver $stockResolver,
     ) {}
 
     public function serialize(ProductInterface $product): array
@@ -52,48 +61,30 @@ class ProductSerializer
         $store   = $this->storeManager->getStore();
         $baseUrl = rtrim((string) $store->getBaseUrl(), '/');
 
-        /** @var \Magento\Catalog\Model\Product $product */
-        // getFinalPrice() can return 0 for configurables when loaded via getList()
-        // because price indexing isn't applied to collection results.
-        // Try multiple sources: getFinalPrice → getPrice → getMinimalPrice → child prices.
-        $price = $product->getFinalPrice();
-        if ($price === null || (float) $price <= 0) {
-            $price = $product->getPrice();
-        }
-        if ($price === null || (float) $price <= 0) {
-            $price = $product->getMinimalPrice();
-        }
+        $price = $this->shopperPrice($product, $store);
 
-        // Still 0? For configurables, get the minimum child price.
-        if (($price === null || (float) $price <= 0) && $product->getTypeId() === 'configurable') {
-            try {
-                $children = $product->getTypeInstance()->getUsedProducts($product);
-                $childPrices = [];
-                foreach ($children as $child) {
-                    $cp = $child->getFinalPrice() ?? $child->getPrice();
-                    if ($cp !== null && (float) $cp > 0) {
-                        $childPrices[] = (float) $cp;
-                    }
-                }
-                if (!empty($childPrices)) {
-                    $price = min($childPrices);
-                }
-            } catch (\Exception $e) {
-                // Non-fatal — keep the 0 price rather than failing the sync
-            }
-        }
-
-        // StockRegistryInterface works on both legacy and MSI installs.
-        // On MSI stores, Magento's InventoryCatalog module keeps cataloginventory_stock_item
-        // in sync, so getStockItem() always returns accurate data without coupling to MSI APIs.
-        $stockItem = $this->stockRegistry->getStockItem((int) $product->getId());
-        $qty       = $stockItem->getProductId() ? (int) $stockItem->getQty() : null;
+        // Salable stock: with MSI, reservations from orders are taken off
+        // (StockResolver); without it, the legacy stock item.
+        $stock = $this->stockResolver->stockFor((int) $product->getId(), (string) $product->getSku(), (int) $store->getWebsiteId());
 
         $categoryIds = [];
         if (method_exists($product, 'getCategoryIds')) {
             $categoryIds = $product->getCategoryIds();
         }
         $categoryNames = $this->resolveCategoryNames($categoryIds);
+        $categoryPaths = $this->resolveCategoryPaths($categoryIds, (int) $store->getRootCategoryId());
+        $attributeList = $this->attributeExtractor->extract($product, (int) $store->getId());
+        // Every ancestor's name too, as the comment on category_names below
+        // has always said: "living" matches a product filed under Living > Rugs.
+        foreach ($categoryPaths as $path) {
+            foreach (explode(' > ', $path) as $n) {
+                $n = trim(mb_strtolower($n));
+                if ($n !== '' && !in_array($n, $categoryNames, true)) {
+                    $categoryNames[] = $n;
+                }
+            }
+        }
+        $categoryNames = array_slice(array_values(array_filter($categoryNames, static fn (string $n): bool => mb_strlen($n) <= 64)), 0, 20);
 
         $url = $this->getProductUrl($product, $baseUrl);
 
@@ -122,8 +113,8 @@ class ProductSerializer
             'description'      => $this->getDescription($product),
             'price'            => $price !== null ? (float) $price : null,
             'currency'         => (string) ($store->getCurrentCurrencyCode() ?: 'GBP'),
-            'in_stock'         => $stockItem->getProductId() ? (bool) $stockItem->getIsInStock() : true,
-            'stock_qty'        => $qty,
+            'in_stock'         => $stock['in_stock'],
+            'stock_qty'        => $stock['qty'],
             'url'              => $url,
             'image_url'        => $this->getImageUrl($product, $baseUrl),
             'category_path'    => implode(' > ', $categoryIds),
@@ -135,8 +126,16 @@ class ProductSerializer
             // ancestor name so "cheapest in living" matches whether the
             // product sits in Living, Living/Cushions, or Home/Living/Rugs.
             'category_names'   => $categoryNames,
-            'attributes'       => $this->extractAttributes($product),
-            'variants'         => $this->extractVariants($product),
+            // Schema 2: the full paths as names, e.g. "Garden > Furniture > Benches".
+            'category_paths'   => $categoryPaths,
+            // Schema 1 map (every API reads it) and the schema-2 list.
+            'attributes'       => $this->attributeExtractor->flatMap($attributeList),
+            'attribute_list'   => $attributeList,
+            'short_description' => $this->getShortDescription($product),
+            'price_includes_tax' => $this->priceResolver->pricesIncludeTax($store),
+            'tax_rate'         => $this->priceResolver->taxRate($product, $store),
+            'tier_prices'      => $this->priceResolver->tierPrices($product, $price !== null ? (float) $price : null),
+            'variants'         => $this->extractVariants($product, $attributeList, $store),
             'avg_rating'       => $reviews['avg_rating'],
             'review_count'     => $reviews['review_count'],
             'review_snippets'  => $reviews['review_snippets'],
@@ -151,6 +150,90 @@ class ProductSerializer
             'sale_price'       => $this->fetchSalePrice($product),
             'is_on_sale'       => $this->isOnSale($product),
         ];
+    }
+
+    /**
+     * The price a logged-out shopper pays, on the basis price_includes_tax
+     * describes: catalogue rules applied, a configurable priced from its
+     * children. The sync and the live endpoint both use it.
+     */
+    public function shopperPrice(ProductInterface $product, \Magento\Store\Api\Data\StoreInterface $store): ?float
+    {
+        /** @var \Magento\Catalog\Model\Product $product */
+        // A configurable's own getFinalPrice() is the storefront display
+        // amount: with prices shown including tax it has the tax added, while
+        // price_includes_tax says how prices are entered, so a price entered
+        // ex-tax went out with the tax on and still marked ex-tax. Its price
+        // is its cheapest child's, on the same basis as a simple product's.
+        $cheapestChild = $product->getTypeId() === 'configurable' ? $this->cheapestChildPrice($product, $store) : null;
+
+        // getFinalPrice() can return 0 for configurables when loaded via getList()
+        // because price indexing isn't applied to collection results.
+        // Try multiple sources: getFinalPrice → getPrice → getMinimalPrice → child prices.
+        $price = $cheapestChild ?? $product->getFinalPrice();
+        if ($price === null || (float) $price <= 0) {
+            $price = $product->getPrice();
+        }
+        if ($price === null || (float) $price <= 0) {
+            $price = $product->getMinimalPrice();
+        }
+
+        // Still 0? For configurables, get the minimum child price.
+        if (($price === null || (float) $price <= 0) && $product->getTypeId() === 'configurable') {
+            try {
+                $children = $product->getTypeInstance()->getUsedProducts($product);
+                $childPrices = [];
+                foreach ($children as $child) {
+                    $cp = $child->getFinalPrice() ?? $child->getPrice();
+                    if ($cp !== null && (float) $cp > 0) {
+                        $childPrices[] = (float) $cp;
+                    }
+                }
+                if (!empty($childPrices)) {
+                    $price = min($childPrices);
+                }
+            } catch (\Exception $e) {
+                // Non-fatal — keep the 0 price rather than failing the sync
+            }
+        }
+
+        // A catalogue price rule is not applied by getFinalPrice() outside the
+        // storefront (cron, CLI): the logged-out shopper's rule price is read
+        // from the rule index (PriceResolver).
+        if ($cheapestChild === null) {
+            $price = $this->priceResolver->shopperPrice($price !== null ? (float) $price : null, $product, $store);
+        }
+
+        return $price !== null ? (float) $price : null;
+    }
+
+    /**
+     * The lowest price a logged-out shopper pays for one of a configurable's
+     * children (catalogue rules applied), counting children that can be
+     * bought when there are any, as the storefront's "from" price does.
+     */
+    private function cheapestChildPrice(ProductInterface $product, \Magento\Store\Api\Data\StoreInterface $store): ?float
+    {
+        try {
+            /** @var \Magento\Catalog\Model\Product $product */
+            $salable = [];
+            $all = [];
+            foreach ($product->getTypeInstance()->getUsedProducts($product) as $child) {
+                $own = $child->getFinalPrice() ?? $child->getPrice();
+                $paid = $this->priceResolver->shopperPrice($own !== null ? (float) $own : null, $child, $store);
+                if ($paid === null || $paid <= 0) {
+                    continue;
+                }
+                $all[] = $paid;
+                if ($child->isSalable()) {
+                    $salable[] = $paid;
+                }
+            }
+            $prices = $salable !== [] ? $salable : $all;
+            return $prices !== [] ? min($prices) : null;
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     /**
@@ -266,7 +349,71 @@ class ProductSerializer
      */
     public function getDescription(ProductInterface $product): string
     {
-        return strip_tags((string) ($product->getData('description') ?? ''));
+        return $this->htmlToText((string) ($product->getData('description') ?? ''));
+    }
+
+    public function getShortDescription(ProductInterface $product): ?string
+    {
+        $text = $this->htmlToText((string) ($product->getData('short_description') ?? ''));
+        return $text === '' ? null : $text;
+    }
+
+    /**
+     * Plain text from product HTML, one line per block. strip_tags() alone
+     * joined paragraphs and list items ("…with it.100% linen, 250 gsm50cm"),
+     * so the end of a block becomes a line break first. Page Builder's HTML
+     * Code element stores its markup escaped ("&lt;P&gt;"), so what decodes
+     * to tags is converted once more.
+     */
+    private function htmlToText(string $html, bool $again = true): string
+    {
+        $html = (string) preg_replace('#<(?:br|hr)\b[^>]*>|</(?:p|div|li|tr|h[1-6]|ul|ol|table|section|article|blockquote)>#i', "\n", $html);
+        $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($again && preg_match('#</?[a-z][a-z0-9]*\b[^>]*>#i', $text)) {
+            return $this->htmlToText($text, false);
+        }
+        $lines = array_map(static fn (string $l): string => trim((string) preg_replace('/[ \t\x{00A0}]+/u', ' ', $l)), explode("\n", $text));
+        return trim(implode("\n", array_values(array_filter($lines, static fn (string $l): bool => $l !== ''))));
+    }
+
+    /**
+     * Each assigned category as its path of names below the store's root
+     * ("Garden > Furniture > Benches"), deduped. Categories outside the
+     * store's tree are skipped.
+     *
+     * @param int[]|string[] $categoryIds
+     * @return string[]
+     */
+    private function resolveCategoryPaths(array $categoryIds, int $rootId): array
+    {
+        $paths = [];
+        foreach ($categoryIds as $id) {
+            $intId = (int) $id;
+            if ($intId <= 1) {
+                continue;
+            }
+            if (!array_key_exists($intId, $this->categoryPathCache)) {
+                $this->categoryPathCache[$intId] = null;
+                try {
+                    $ids = array_map('intval', explode('/', (string) $this->categoryRepository->get($intId)->getPath()));
+                    $at = array_search($rootId, $ids, true);
+                    if ($rootId > 0 && $at !== false) {
+                        $names = [];
+                        foreach (array_slice($ids, $at + 1) as $cid) {
+                            $names[] = trim((string) $this->categoryRepository->get($cid)->getName());
+                        }
+                        $names = array_values(array_filter($names, static fn (string $n): bool => $n !== ''));
+                        $this->categoryPathCache[$intId] = $names === [] ? null : implode(' > ', $names);
+                    }
+                } catch (NoSuchEntityException $e) {
+                    $this->categoryPathCache[$intId] = null;
+                }
+            }
+            if ($this->categoryPathCache[$intId] !== null) {
+                $paths[$this->categoryPathCache[$intId]] = true;
+            }
+        }
+        return array_keys($paths);
     }
 
     /**
@@ -368,8 +515,13 @@ class ProductSerializer
      *
      * @return array<array{sku: string, color?: string, size?: string, in_stock: bool, price?: float, options: array<string, string>}>
      */
-    private function extractVariants(ProductInterface $product): array
+    private function extractVariants(ProductInterface $product, array $parentAttributes = [], ?\Magento\Store\Api\Data\StoreInterface $store = null): array
     {
+        $store ??= $this->storeManager->getStore();
+        $parentValues = [];
+        foreach ($parentAttributes as $a) {
+            $parentValues[$a['code']] = $a['value'];
+        }
         /** @var \Magento\Catalog\Model\Product $product */
         if ($product->getTypeId() !== Configurable::TYPE_CODE) {
             return [];
@@ -390,6 +542,7 @@ class ProductSerializer
             // We need both the human-readable label AND the Magento attribute/option IDs
             // for the widget's add-to-cart functionality.
             $configurableAttrs = [];    // [code => attributeId]
+            $optionLabels = [];         // [code => the label shoppers see]
             $swatchData = [];           // [code => [optionId => {type, value}]]
             $configurableAttributes = $typeInstance->getConfigurableAttributes($product);
             foreach ($configurableAttributes as $attr) {
@@ -398,6 +551,19 @@ class ProductSerializer
                     $code = $productAttr->getAttributeCode();
                     if ($code) {
                         $configurableAttrs[$code] = (int) $productAttr->getId();
+                        // The option's label as the product page shows it; a
+                        // code need not say what it is ("..._chair_option" is
+                        // the heat and massage option).
+                        $optionLabel = trim((string) $attr->getLabel());
+                        if ($optionLabel === '') {
+                            $optionLabel = trim((string) $productAttr->getStoreLabel((int) $store->getId()));
+                        }
+                        if ($optionLabel === '') {
+                            $optionLabel = trim((string) $productAttr->getDefaultFrontendLabel());
+                        }
+                        if ($optionLabel !== '') {
+                            $optionLabels[$code] = $optionLabel;
+                        }
                         // Extract swatch data if available (color dots, images, text)
                         try {
                             $attrOptions = $productAttr->getSource()->getAllOptions(false);
@@ -444,16 +610,31 @@ class ProductSerializer
         $variants = [];
         foreach ($children as $child) {
             /** @var \Magento\Catalog\Model\Product $child */
-            $childStock = $this->stockRegistry->getStockItem((int) $child->getId());
+            $childStock = $this->stockResolver->stockFor((int) $child->getId(), (string) $child->getSku(), (int) $store->getWebsiteId());
 
             $variant = [
-                'sku'      => (string) $child->getSku(),
-                'in_stock' => $childStock->getProductId() ? (bool) $childStock->getIsInStock() : true,
+                'sku'       => (string) $child->getSku(),
+                'name'      => (string) $child->getName(),
+                'in_stock'  => $childStock['in_stock'],
+                // Schema 2: the child's own salable quantity.
+                'stock_qty' => $childStock['qty'],
             ];
 
             $childPrice = $child->getFinalPrice() ?? $child->getPrice();
+            $childPrice = $this->priceResolver->shopperPrice($childPrice !== null ? (float) $childPrice : null, $child, $store);
             if ($childPrice !== null) {
                 $variant['price'] = (float) $childPrice;
+            }
+
+            // Schema 2: the child's attribute values that differ from the parent's.
+            $own = [];
+            foreach ($this->attributeExtractor->extract($child, (int) $store->getId()) as $a) {
+                if (!array_key_exists($a['code'], $parentValues) || $parentValues[$a['code']] !== $a['value']) {
+                    $own[] = $a;
+                }
+            }
+            if ($own !== []) {
+                $variant['attribute_list'] = $own;
             }
 
             // Extract ALL configurable option values dynamically.
@@ -491,6 +672,11 @@ class ProductSerializer
             }
             if (!empty($options)) {
                 $variant['options'] = $options;
+                // Schema 2: the store's label for each option code.
+                $labels = array_intersect_key($optionLabels, $options);
+                if ($labels !== []) {
+                    $variant['option_labels'] = $labels;
+                }
             }
             if (!empty($superAttributes)) {
                 $variant['super_attributes'] = $superAttributes;
@@ -500,38 +686,5 @@ class ProductSerializer
         }
 
         return $variants;
-    }
-
-    private function extractAttributes(ProductInterface $product): array
-    {
-        /** @var \Magento\Catalog\Model\Product $product */
-        $attrs = [];
-        foreach ($product->getCustomAttributes() as $attr) {
-            $attrCode = $attr->getAttributeCode();
-            try {
-                $attrModel = $this->attributeRepository->get($attrCode);
-            } catch (\Exception $e) {
-                continue;
-            }
-            // Only include searchable or filterable attributes
-            if (!$attrModel->getIsSearchable() && !$attrModel->getIsFilterable()) {
-                continue;
-            }
-            // Prefer human-readable label (resolves option IDs to text)
-            $value = $product->getAttributeText($attrCode);
-            if ($value === false || $value === null) {
-                $value = $attr->getValue();
-            }
-            if ($value === null || $value === '' || $value === false) {
-                continue;
-            }
-            if (is_array($value)) {
-                $value = implode(', ', array_filter($value, fn($v) => $v !== '' && $v !== false));
-            }
-            if ((string) $value !== '') {
-                $attrs[$attrCode] = (string) $value;
-            }
-        }
-        return $attrs;
     }
 }

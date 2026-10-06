@@ -39,9 +39,16 @@ function idea89SyncNow(url) {
     fetch(url, {method:'POST', credentials:'same-origin', headers:{'X-Requested-With':'XMLHttpRequest'}, body: body})
         .then(function(r){return r.json();})
         .then(function(d){
-            result.innerHTML = d.ok
-                ? '<span style="color:#2c7a2c">&#10003; Synced ' + (d.synced || 0) + ' products</span>'
-                : '<span style="color:#c00">&#10007; ' + (d.error || 'Sync failed') + '</span>';
+            if (!d.ok) {
+                result.innerHTML = '<span style="color:#c00">&#10007; ' + (d.error || 'Sync failed') + '</span>';
+                return;
+            }
+            var parts = [];
+            parts.push(typeof d.synced === 'number' ? 'Synced ' + d.synced + ' products' : 'Synced content');
+            if (d.withdrawn) { parts.push(d.withdrawn + ' hidden or disabled removed'); }
+            var colour = d.failed ? '#b36b00' : '#2c7a2c';
+            if (d.failed) { parts.push(d.failed + ' failed, see var/log/system.log'); }
+            result.innerHTML = '<span style="color:' + colour + '">&#10003; ' + parts.join(', ') + '</span>';
         })
         .catch(function(e){result.innerHTML='<span style="color:#c00">Request failed: ' + e + '</span>';})
         .finally(function(){btn.disabled=false;});

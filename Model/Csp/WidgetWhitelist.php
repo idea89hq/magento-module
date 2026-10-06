@@ -60,6 +60,12 @@ class WidgetWhitelist implements PolicyCollectorInterface
             $policies[] = new FetchPolicy('connect-src', false, $hosts);
             // script-src — the <script src="…/widget/v1/{apiKey}.js"> tag.
             $policies[] = new FetchPolicy('script-src', false, $hosts);
+            // style-src + font-src: the widget's design fonts. They are served
+            // from the API and declared in the page (a font declared inside the
+            // widget's shadow root is ignored by Chrome), so a store enforcing
+            // CSP would otherwise keep the fallback fonts.
+            $policies[] = new FetchPolicy('style-src', false, $hosts);
+            $policies[] = new FetchPolicy('font-src', false, $hosts);
             // img-src — Leaflet map tiles loaded by the store-locator widget view.
             $policies[] = new FetchPolicy('img-src', false, array_merge($hosts, ['https://tiles.stadiamaps.com']));
         }

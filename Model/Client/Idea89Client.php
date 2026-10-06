@@ -23,12 +23,23 @@ class Idea89Client
     private const SYNC_KEY_ERRORS = ['sync_key_not_set', 'sync_key_required', 'invalid_sync_key'];
 
     /**
+     * Catalogue payload schema this module sends. An IDEA89 API that predates
+     * schema 2 ignores the version, the platform and every schema-2 key.
+     */
+    public const SCHEMA_VERSION = 2;
+    public const PLATFORM = 'magento2';
+
+    /**
      * Set when a catalogue write was refused because of the sync key, holding
      * the API's merchant-facing message. The write methods still just return
      * false (observers call them during admin saves and must never throw);
      * full syncs check this to stop early, and Sync Now shows it.
      */
     private ?string $syncKeyRejection = null;
+
+    private ?string $connectionError = null;
+
+    private bool $retryableFailure = false;
 
     public function __construct(
         private readonly Curl $curl,
@@ -64,6 +75,29 @@ class Idea89Client
     public function getSyncKeyRejection(): ?string
     {
         return $this->syncKeyRejection;
+    }
+
+    /**
+     * The error from the last catalogue write that could not reach the API
+     * at all (refused, DNS, timeout), or null when every write got an answer.
+     */
+    public function getConnectionError(): ?string
+    {
+        return $this->connectionError;
+    }
+
+    /**
+     * Whether a catalogue write since the last call failed in a way a retry
+     * can fix: the API unreachable (status 0), a timeout or rate limit (408,
+     * 429) or a server error (5xx). Clears the flag. A 4xx other than those
+     * (validation, a refused key) fails the same way next time, so it is not
+     * retryable; the nightly sync is its safety net.
+     */
+    public function takeRetryableFailure(): bool
+    {
+        $failed = $this->retryableFailure;
+        $this->retryableFailure = false;
+        return $failed;
     }
 
     /**
@@ -145,16 +179,18 @@ class Idea89Client
         }
 
         $url = $apiUrl . '/v1/catalog/upsert';
-        $body = json_encode(['products' => $products], JSON_THROW_ON_ERROR);
+        $body = json_encode([
+            'schema_version' => self::SCHEMA_VERSION,
+            'platform'       => self::PLATFORM,
+            'products'       => $products,
+        ], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
 
         $this->curl->setTimeout(self::BATCH_TIMEOUT);
         $this->curl->addHeader('Content-Type', 'application/json');
         $this->curl->addHeader('X-IDEA89-Key', $apiKey);
         $this->addDomainHeader();
         $this->addSyncKeyHeader();
-        $this->curl->post($url, $body);
-
-        $status = $this->curl->getStatus();
+        $status = $this->post($url, $body);
         if ($status !== 200 && $status !== 201) {
             $this->logger->warning('IDEA89: catalog upsert failed', [
                 'status' => $status,
@@ -169,26 +205,64 @@ class Idea89Client
     }
 
     /**
+     * Remove products from the assistant: deleted in Magento, disabled, or no
+     * longer visible in the catalogue or search. Uses POST /v1/catalog/delete,
+     * which every IDEA89 API version accepts. At most 500 ids per call.
+     *
+     * @param string[] $externalIds
+     */
+    public function deleteProducts(array $externalIds, string $apiKey, string $apiUrl): bool
+    {
+        $externalIds = array_values(array_unique(array_filter(array_map('strval', $externalIds), static fn (string $id): bool => $id !== '')));
+        if ($externalIds === []) {
+            return true;
+        }
+        $ok = true;
+        foreach (array_chunk($externalIds, 500) as $chunk) {
+            $this->curl->setTimeout(self::TIMEOUT);
+            $this->curl->addHeader('Content-Type', 'application/json');
+            $this->curl->addHeader('X-IDEA89-Key', $apiKey);
+            $this->addDomainHeader();
+            $this->addSyncKeyHeader();
+            $status = $this->post($apiUrl . '/v1/catalog/delete', json_encode(['external_ids' => $chunk], JSON_THROW_ON_ERROR));
+            if ($status !== 200) {
+                $this->logger->warning('IDEA89: catalog delete failed', [
+                    'status' => $status,
+                    'response' => substr((string) $this->curl->getBody(), 0, 500),
+                    'count' => count($chunk),
+                ]);
+                $this->noteSyncKeyRejection($status);
+                $ok = false;
+            }
+        }
+        return $ok;
+    }
+
+    /**
      * POST a batch of content items (categories, CMS pages, store info) to the API.
      * Returns true on success.
      */
-    public function upsertContent(array $items, string $apiKey, string $apiUrl): bool
+    public function upsertContent(array $items, string $apiKey, string $apiUrl, ?array $cmsPageIds = null): bool
     {
         if (empty($items)) {
             return true;
         }
 
         $url  = $apiUrl . '/v1/catalog/content';
-        $body = json_encode(['items' => $items], JSON_THROW_ON_ERROR);
+        // With the ids of every CMS page synced now, the API removes pages it
+        // holds that are no longer among them; an older API ignores the key.
+        $payload = ['items' => $items];
+        if ($cmsPageIds !== null) {
+            $payload['cms_page_ids'] = array_values($cmsPageIds);
+        }
+        $body = json_encode($payload, JSON_THROW_ON_ERROR);
 
         $this->curl->setTimeout(self::TIMEOUT);
         $this->curl->addHeader('Content-Type', 'application/json');
         $this->curl->addHeader('X-IDEA89-Key', $apiKey);
         $this->addDomainHeader();
         $this->addSyncKeyHeader();
-        $this->curl->post($url, $body);
-
-        $status = $this->curl->getStatus();
+        $status = $this->post($url, $body);
         if ($status !== 200 && $status !== 201) {
             $this->logger->warning('IDEA89: content upsert failed', [
                 'status'     => $status,
@@ -220,9 +294,7 @@ class Idea89Client
         $this->curl->addHeader('X-IDEA89-Key', $apiKey);
         $this->addDomainHeader();
         $this->addSyncKeyHeader();
-        $this->curl->post($url, $body);
-
-        $status = $this->curl->getStatus();
+        $status = $this->post($url, $body);
         if ($status !== 200 && $status !== 201) {
             $this->logger->warning('IDEA89: promo upsert failed', [
                 'status'      => $status,
@@ -255,9 +327,7 @@ class Idea89Client
         $this->curl->addHeader('X-IDEA89-Key', $apiKey);
         $this->addDomainHeader();
         $this->addSyncKeyHeader();
-        $this->curl->post($url, $body);
-
-        $status = $this->curl->getStatus();
+        $status = $this->post($url, $body);
         if ($status !== 200 && $status !== 201) {
             $this->logger->warning('IDEA89: stock update failed', [
                 'status'     => $status,
@@ -269,6 +339,30 @@ class Idea89Client
         }
 
         return true;
+    }
+
+    /**
+     * POST and return the HTTP status, or 0 when the API could not be reached.
+     *
+     * Framework\HTTP\Client\Curl throws on a refused connection, a DNS
+     * failure or a timeout. Uncaught, that aborted whatever called the sync:
+     * a cart price rule save in the admin, or a cron part-way through its
+     * queue. Every caller already treats a non-2xx status as a failed send.
+     */
+    private function post(string $url, string $body): int
+    {
+        try {
+            $this->curl->post($url, $body);
+            $status = (int) $this->curl->getStatus();
+        } catch (\Exception $e) {
+            $this->logger->warning('IDEA89: could not reach the API', ['url' => $url, 'error' => $e->getMessage()]);
+            $this->connectionError = $e->getMessage();
+            $status = 0;
+        }
+        if ($status === 0 || $status === 408 || $status === 429 || $status >= 500) {
+            $this->retryableFailure = true;
+        }
+        return $status;
     }
 
     /**
@@ -342,17 +436,26 @@ class Idea89Client
     {
         $url = $apiUrl . '/health';
 
-        $this->curl->setTimeout(self::TIMEOUT);
-        $this->curl->addHeader('X-IDEA89-Key', $apiKey);
-        $this->curl->get($url);
+        // The curl client throws when the API cannot be reached (refused,
+        // DNS, timeout). Uncaught, the admin got Magento's error page where
+        // it expects JSON, and the button showed a JSON parse error.
+        try {
+            $this->curl->setTimeout(self::TIMEOUT);
+            $this->curl->addHeader('X-IDEA89-Key', $apiKey);
+            $this->curl->get($url);
 
-        $status = $this->curl->getStatus();
-        if ($status !== 200) {
-            $this->logger->warning('IDEA89: connection test failed', ['status' => $status]);
-            return ['ok' => false, 'error' => __('API returned status %1. Check your API key.', $status)->render()];
+            $status = $this->curl->getStatus();
+            if ($status !== 200) {
+                $this->logger->warning('IDEA89: connection test failed', ['status' => $status]);
+                return ['ok' => false, 'error' => __('API returned status %1. Check your API key.', $status)->render()];
+            }
+
+            return $this->verifyCatalogAccess($apiKey, $apiUrl);
+        } catch (\Exception $e) {
+            $this->logger->warning('IDEA89: connection test failed', ['url' => $apiUrl, 'error' => $e->getMessage()]);
+            $error = __('Could not reach the IDEA89 API at %1: %2', $apiUrl, $e->getMessage());
+            return ['ok' => false, 'error' => $error->render()];
         }
-
-        return $this->verifyCatalogAccess($apiKey, $apiUrl);
     }
 
     /**

@@ -31,6 +31,7 @@ class Config
     private const XML_PATH_SYNC_CATS      = 'idea89/sync/sync_categories';
     private const XML_PATH_SYNC_CMS       = 'idea89/sync/sync_cms';
     private const XML_PATH_SYNC_STORE     = 'idea89/sync/sync_store_info';
+    private const XML_PATH_EXCLUDED_ATTRS = 'idea89/sync/excluded_attributes';
 
     public const DEFAULT_API_URL = 'https://api.idea89.com';
 
@@ -130,5 +131,17 @@ class Config
     public function isSyncStoreInfo(string $scopeType = ScopeInterface::SCOPE_STORE, ?string $scopeCode = null): bool
     {
         return $this->scopeConfig->isSetFlag(self::XML_PATH_SYNC_STORE, $scopeType, $scopeCode);
+    }
+
+    /**
+     * Attribute codes the merchant chose not to send (admin settings marked
+     * visible on the storefront, internal flags).
+     *
+     * @return string[]
+     */
+    public function getExcludedAttributes(string $scopeType = ScopeInterface::SCOPE_STORE, ?string $scopeCode = null): array
+    {
+        $raw = (string) $this->scopeConfig->getValue(self::XML_PATH_EXCLUDED_ATTRS, $scopeType, $scopeCode);
+        return array_values(array_unique(array_filter(array_map('trim', explode(',', $raw)), static fn (string $c): bool => $c !== '')));
     }
 }

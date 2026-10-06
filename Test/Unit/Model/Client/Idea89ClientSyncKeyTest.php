@@ -136,4 +136,84 @@ class Idea89ClientSyncKeyTest extends TestCase
         // An API that predates /v1/catalog/verify: the health check stands.
         $this->assertSame(['ok' => true], $this->withResponses([200, 404], ['{}', ''])->testConnection('k', 'https://api.test'));
     }
+
+    public function testConnectionReportsAnUnreachableApiInsteadOfThrowing(): void
+    {
+        $curl = $this->createMock(Curl::class);
+        $curl->method('get')->willThrowException(new \Exception('Failed to connect to api.test port 3000: Connection refused'));
+        $client = new Idea89Client(
+            $curl,
+            $this->createMock(Config::class),
+            $this->createMock(LoggerInterface::class),
+            $this->createMock(ScopeConfigInterface::class)
+        );
+
+        $result = $client->testConnection('k', 'http://api.test:3000');
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('http://api.test:3000', $result['error']);
+        $this->assertStringContainsString('Connection refused', $result['error']);
+    }
+
+    public function testAnUnreachableApiFailsTheWriteWithoutThrowing(): void
+    {
+        $curl = $this->createMock(Curl::class);
+        $curl->method('post')->willThrowException(new \Exception('Connection refused'));
+        $client = new Idea89Client(
+            $curl,
+            $this->createMock(Config::class),
+            $this->createMock(LoggerInterface::class),
+            $this->createMock(ScopeConfigInterface::class)
+        );
+
+        $this->assertNull($client->getConnectionError());
+        $this->assertFalse($client->upsertProducts([['external_id' => '1']], 'k', 'http://api.test'));
+        $this->assertFalse($client->deleteProducts(['1'], 'k', 'http://api.test'));
+        $this->assertFalse($client->upsertContent([['type' => 'page']], 'k', 'http://api.test'));
+        $this->assertFalse($client->upsertPromos([['code' => 'X']], 'k', 'http://api.test'));
+        $this->assertFalse($client->upsertStock([['external_id' => '1']], 'k', 'http://api.test'));
+        $this->assertSame('Connection refused', $client->getConnectionError());
+        $this->assertNull($client->getSyncKeyRejection());
+    }
+
+    public function testOnlyFailuresARetryCanFixAreRetryable(): void
+    {
+        foreach ([[200, false], [201, false], [400, false], [401, false], [422, false],
+                  [408, true], [429, true], [500, true], [503, true]] as [$status, $retryable]) {
+            $client = $this->withResponses([$status], ['{}']);
+            $client->upsertStock([['external_id' => '1']], 'k', 'https://api.test');
+            $this->assertSame($retryable, $client->takeRetryableFailure(), 'status ' . $status);
+            $this->assertFalse($client->takeRetryableFailure(), 'cleared after reading');
+        }
+
+        $curl = $this->createMock(Curl::class);
+        $curl->method('post')->willThrowException(new \Exception('Connection refused'));
+        $down = new Idea89Client(
+            $curl,
+            $this->createMock(Config::class),
+            $this->createMock(LoggerInterface::class),
+            $this->createMock(ScopeConfigInterface::class)
+        );
+        $down->upsertProducts([['external_id' => '1']], 'k', 'http://api.test');
+        $this->assertTrue($down->takeRetryableFailure());
+    }
+
+    public function testContentCarriesTheSyncedCmsPageIdsOnlyWhenGiven(): void
+    {
+        $bodies = [];
+        $curl = $this->createMock(Curl::class);
+        $curl->method('post')->willReturnCallback(function (string $url, string $body) use (&$bodies) { $bodies[] = json_decode($body, true); });
+        $curl->method('getStatus')->willReturn(200);
+        $client = new Idea89Client($curl, $this->createMock(Config::class), $this->createMock(LoggerInterface::class), $this->createMock(ScopeConfigInterface::class));
+        $item = [['type' => 'store_info', 'external_id' => 'store', 'title' => 'Shop']];
+
+        $client->upsertContent($item, 'k', 'https://api.test');
+        $client->upsertContent($item, 'k', 'https://api.test', ['cms_5']);
+        $client->upsertContent($item, 'k', 'https://api.test', []);
+
+        $this->assertArrayNotHasKey('cms_page_ids', $bodies[0]);
+        $this->assertSame(['cms_5'], $bodies[1]['cms_page_ids']);
+        // CMS sync on with no pages left: an empty list withdraws them all.
+        $this->assertSame([], $bodies[2]['cms_page_ids']);
+    }
 }
