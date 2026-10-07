@@ -13,11 +13,10 @@ use Magento\Cms\Model\ResourceModel\Page\CollectionFactory as PageCollectionFact
 use Magento\Store\Model\StoreManagerInterface;
 use Psr\Log\LoggerInterface;
 use Idea89\Assistant\Model\Config;
-use Idea89\Assistant\Model\RemoteCfg;
 use Idea89\Assistant\Model\Client\Idea89Client;
 
 /**
- * Syncs store info, categories, and CMS pages to the IDEA89 API.
+ * Syncs store details, categories, and CMS pages to the IDEA89 API.
  * Called during the daily cron and the "Sync Now" admin button.
  */
 class ContentSyncer
@@ -30,8 +29,7 @@ class ContentSyncer
         private readonly StoreManagerInterface $storeManager,
         private readonly Idea89Client $client,
         private readonly Config $config,
-        private readonly LoggerInterface $logger,
-        private readonly RemoteCfg $remoteCfg
+        private readonly LoggerInterface $logger
     ) {}
 
     public function syncAll(): void
@@ -81,30 +79,63 @@ class ContentSyncer
         $this->logger->info('IDEA89 ContentSyncer: done');
     }
 
+    /**
+     * The store_info item: plain facts about the store (name, currency,
+     * contact email, website), never free text.
+     *
+     * Merchant-written "store context" lives only in the IDEA89 dashboard
+     * (AI & Knowledge). This module used to have its own Store Context field
+     * as well: both were put in every chat prompt, neither screen showed the
+     * other, and they could contradict each other. Sending the same
+     * external_id replaces the old row, so a store that had text here stops
+     * sending it on the next sync.
+     */
     private function buildStoreInfo(): array
     {
-        $store       = $this->storeManager->getStore();
-        $storeName   = $store->getName();
-        $context     = $this->config->getStoreContext();
-        // Prefer the account's name over the local row. The local row is a
-        // render cache that only heals when someone opens the admin form, so
-        // a name changed in the dashboard would otherwise be published into
-        // the prompt stale by the next cron run, and the assistant would go
-        // back to introducing itself as something the header does not say.
-        $remoteName = $this->remoteCfg->get()['assistantName'] ?? '';
-        $assistantName = $remoteName !== '' ? $remoteName : $this->config->getAssistantName();
+        $store = $this->storeManager->getStore();
+        return self::storeInfoItem([
+            'name'     => (string) $store->getName(),
+            'currency' => (string) $store->getCurrentCurrencyCode(),
+            'email'    => $this->config->getGeneralContactEmail(),
+            'url'      => (string) $store->getBaseUrl(),
+        ]);
+    }
 
-        $body = trim(implode(' ', array_filter([
-            $context,
-            $context ? '' : 'An online store selling products at ' . $storeName . '.',
-            'Assistant name: ' . $assistantName . '.',
-        ])));
+    /**
+     * Pure builder, shared shape with the WooCommerce plugin. Only facts that
+     * exist are included: Magento ships owner@example.com / example.com
+     * placeholders, and a made-up contact address would be repeated to
+     * shoppers as fact.
+     *
+     * @param array{name?: string, currency?: string, email?: string, url?: string} $facts
+     * @return array{type: string, external_id: string, title: string, body: string}
+     */
+    public static function storeInfoItem(array $facts): array
+    {
+        $name  = trim($facts['name'] ?? '');
+        $email = trim($facts['email'] ?? '');
+        $url   = trim($facts['url'] ?? '');
+        $placeholder = '/@(example\.(com|org|net)|localhost)$/i';
+
+        $parts = [];
+        if ($name !== '') {
+            $parts[] = sprintf('Store name: %s.', $name);
+        }
+        if (trim($facts['currency'] ?? '') !== '') {
+            $parts[] = sprintf('Prices are shown in %s.', trim($facts['currency']));
+        }
+        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) && !preg_match($placeholder, $email)) {
+            $parts[] = sprintf('Contact email: %s.', $email);
+        }
+        if ($url !== '' && preg_match('#^https?://#i', $url)) {
+            $parts[] = sprintf('Website: %s.', rtrim($url, '/'));
+        }
 
         return [
             'type'        => 'store_info',
             'external_id' => 'store',
-            'title'       => $storeName,
-            'body'        => $body,
+            'title'       => $name !== '' ? $name : 'Store',
+            'body'        => implode(' ', $parts),
         ];
     }
 

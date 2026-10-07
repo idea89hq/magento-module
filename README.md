@@ -22,7 +22,7 @@ Turn your Magento storefront into a conversion machine. IDEA89 adds an AI-powere
 |---------|-------------|
 | **Smart product recommendations** | AI understands natural language queries like "something waterproof under 100 pounds" and finds the right products from your catalogue |
 | **Real-time catalogue sync** | Products, variants, prices, stock levels, and reviews are synced automatically. Out-of-stock items are never recommended |
-| **Brand voice** | Configure your assistant's name, tone, and store context. It answers like a member of your team |
+| **Brand voice** | Configure your assistant's name here or in your IDEA89 dashboard; describe your store and set the tone in the dashboard (AI & Knowledge). It answers like a member of your team |
 | **Promotion awareness** | Active cart price rules are synced so the assistant can surface relevant discounts |
 | **In-chat order tracking** _(new in v1.1.1)_ | When a shopper asks "where is my order?" the assistant surfaces a compact order card right in the chat with status, items, and a carrier tracking link. Logged-in customers see their last 3 orders; guests verify with order number + email |
 | **Store Locator** _(new in v1.1.0)_ | Physical showroom finder with map, postcode search, hours, photos, and directions — in chat and on a dedicated `/store-finder` page (URL configurable) |
@@ -77,7 +77,6 @@ Navigate to **Stores > Configuration > IDEA89 > AI Shopping Assistant** in Magen
 | **Enable Widget** | Turn the chat widget on/off |
 | **API Key** | Your API key from the IDEA89 dashboard (stored encrypted) |
 | **Assistant Name** | Name shown in the widget header (e.g. "Aria", "Shop Helper") |
-| **Store Context** | Describe what your store sells so the AI can answer general questions |
 | **Test Connection** | Verify your API key works |
 | **Sync Now** | Manually trigger a full catalogue sync |
 
@@ -86,7 +85,8 @@ Navigate to **Stores > Configuration > IDEA89 > AI Shopping Assistant** in Magen
 | Setting | Description |
 |---------|-------------|
 | **Position** | Bottom-right or bottom-left |
-| **Brand Colour** | Hex code for the widget header (e.g. `#2563eb`) |
+
+Brand colour, theme and fonts are set in the IDEA89 dashboard (Settings > Widget), with a live preview.
 
 ### Content Sync
 

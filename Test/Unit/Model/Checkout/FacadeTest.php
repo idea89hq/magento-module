@@ -187,6 +187,50 @@ class FacadeTest extends TestCase
         $this->assertSame([], $context['methods']);
     }
 
+    /**
+     * A quote for context() with an optional shipping country; config paths
+     * answer from $config.
+     *
+     * @param array<string,string> $config
+     */
+    private function defaultCountryContext(?string $shippingCountry, array $config): string
+    {
+        $quote = $this->createMock(Quote::class);
+        $quote->method('getItemsCount')->willReturn(1);
+        $quote->method('isVirtual')->willReturn(false);
+        if ($shippingCountry !== null) {
+            $address = $this->createMock(QuoteAddress::class);
+            $address->method('getCountryId')->willReturn($shippingCountry);
+            $quote->method('getShippingAddress')->willReturn($address);
+        }
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->checkoutConfig->method('getNativeMethods')->willReturn([]);
+        $this->stubActiveMethods([]);
+        $this->scopeConfig->method('getValue')->willReturnCallback(fn ($path) => $config[$path] ?? null);
+        return $this->facade->context()['default_country'];
+    }
+
+    public function testDefaultCountryIsTheQuotesShippingCountryWhenSet(): void
+    {
+        $this->assertSame('FR', $this->defaultCountryContext('fr', ['general/country/default' => 'GB']));
+    }
+
+    public function testDefaultCountryFallsBackToTheStoreDefault(): void
+    {
+        $this->assertSame('GB', $this->defaultCountryContext('', ['general/country/default' => 'GB']));
+    }
+
+    public function testDefaultCountryIsUpperCasedWhenThereIsNoShippingAddress(): void
+    {
+        $this->assertSame('GB', $this->defaultCountryContext(null, ['general/country/default' => 'gb']));
+    }
+
+    public function testDefaultCountryIsEmptyWhenNothingUsableIsConfigured(): void
+    {
+        $this->assertSame('', $this->defaultCountryContext(null, ['general/country/default' => 'United Kingdom']));
+    }
+
+
     public function testContextReturnsEmptyAllowedCountriesWhenTheMerchantHasNotRestrictedAny(): void
     {
         // general/country/allow blank is core Magento's own default ("ship

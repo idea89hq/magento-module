@@ -51,11 +51,6 @@ class Widget extends Template
         return $this->config->getWidgetPosition();
     }
 
-    public function getBrandColor(): string
-    {
-        return $this->config->getBrandColor();
-    }
-
     /**
      * The inline bootstrap the storefront runs before the widget script loads.
      *

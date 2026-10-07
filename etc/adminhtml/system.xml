@@ -50,11 +50,6 @@
                     <comment><![CDATA[The name shown above the conversation, e.g. "Aria" or "Shop Helper". It is also how the assistant refers to itself when a shopper asks.<br/><br/><strong>Shared with your IDEA89 dashboard.</strong> This name is stored in your IDEA89 account rather than in Magento, so it is the same in both places. If IDEA89 cannot be reached when you save, nothing is changed and Magento will tell you so.]]></comment>
                 </field>
 
-                <field id="store_context" translate="label comment" type="textarea" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
-                    <label>Store Context</label>
-                    <comment>Describe what your store sells so the assistant can answer general questions. E.g. "We specialise in outdoor gardening tools and accessories for home and professional gardeners."</comment>
-                </field>
-
                 <field id="test_connection" translate="label" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Test Connection</label>
                     <frontend_model>Idea89\Assistant\Block\Adminhtml\TestConnectionButton</frontend_model>
@@ -71,16 +66,11 @@
             <!-- ── Widget Appearance ───────────────────────── -->
             <group id="widget" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
                 <label>Widget Appearance</label>
+                <comment>Theme, brand colour and fonts are set in your IDEA89 dashboard (Settings → Widget), with a live preview.</comment>
 
                 <field id="position" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Position</label>
                     <source_model>Idea89\Assistant\Model\Config\Source\WidgetPosition</source_model>
-                </field>
-
-                <field id="brand_color" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
-                    <label>Brand Colour</label>
-                    <comment>Hex colour code, e.g. #2563eb</comment>
-                    <validate>validate-color</validate>
                 </field>
             </group>
 
@@ -420,7 +410,7 @@ Turning this on does not give anyone access to your orders, customers, or paymen
             <!-- ── Personalization ─────────────────────────── -->
             <group id="personalization" translate="label comment" type="text" sortOrder="29" showInDefault="1" showInWebsite="1" showInStore="1">
                 <label>Personalization</label>
-                <comment><![CDATA[Lets Aria recognise logged-in customers and confirm live prices/stock. Paste the Signing Secret from your IDEA89 dashboard (Settings → Widget).]]></comment>
+                <comment><![CDATA[Lets Aria recognise logged-in customers and confirm live prices/stock. Create the Signing Secret in your IDEA89 dashboard (Settings → Widget → Personalization) and paste it below.]]></comment>
                 <field id="status" translate="label" sortOrder="5" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Personalization</label>
                     <frontend_model>Idea89\Assistant\Block\Adminhtml\System\Config\PersonalizationStatus</frontend_model>

@@ -10,7 +10,6 @@ namespace Idea89\Assistant\Test\Unit\Model\Sync;
 
 use Idea89\Assistant\Model\Client\Idea89Client;
 use Idea89\Assistant\Model\Config;
-use Idea89\Assistant\Model\RemoteCfg;
 use Idea89\Assistant\Model\Sync\ContentSyncer;
 use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCollectionFactory;
 use Magento\Cms\Model\Page;
@@ -75,8 +74,7 @@ class ContentSyncerCmsTest extends TestCase
             $stores,
             $client,
             $config,
-            $this->createMock(LoggerInterface::class),
-            $this->createMock(RemoteCfg::class)
+            $this->createMock(LoggerInterface::class)
         ))->syncAll();
     }
 }

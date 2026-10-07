@@ -394,6 +394,17 @@ class Idea89Client
     }
 
     /**
+     * One-time handover of the removed Brand Colour field. IDEA89 uses the
+     * colour only while the dashboard is still on the theme's own palette,
+     * never overwriting a colour picked there. True on a confirmed 200,
+     * whether or not it was used: either way the dashboard now owns it.
+     */
+    public function seedBrandColor(string $colour, string $apiKey, string $apiUrl): bool
+    {
+        return $this->putPluginSetting(['brand_color_seed' => $colour], $apiKey, $apiUrl, 'brand colour handover');
+    }
+
+    /**
      * Shared writer for /v1/plugin-settings.
      *
      * @param array<string,string> $payload

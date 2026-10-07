@@ -22,11 +22,9 @@ class Config
     private const XML_PATH_API_KEY        = 'idea89/general/api_key';
     private const XML_PATH_SYNC_KEY       = 'idea89/general/sync_key';
     private const XML_PATH_ASSISTANT_NAME = 'idea89/general/assistant_name';
-    private const XML_PATH_STORE_CONTEXT  = 'idea89/general/store_context';
     private const XML_PATH_API_URL        = 'idea89/advanced/api_url';
     private const XML_PATH_WIDGET_URL     = 'idea89/advanced/widget_url';
     private const XML_PATH_POSITION       = 'idea89/widget/position';
-    private const XML_PATH_COLOR          = 'idea89/widget/brand_color';
     private const XML_PATH_SYNC_PRODUCTS  = 'idea89/sync/sync_products';
     private const XML_PATH_SYNC_CATS      = 'idea89/sync/sync_categories';
     private const XML_PATH_SYNC_CMS       = 'idea89/sync/sync_cms';
@@ -76,9 +74,14 @@ class Config
         return $name ?: 'Shopping Assistant';
     }
 
-    public function getStoreContext(string $scopeType = ScopeInterface::SCOPE_STORE, ?string $scopeCode = null): string
+    /**
+     * The store's general contact address (Stores > Configuration > General >
+     * Store Email Addresses), or '' when unset. Used only as a fact in the
+     * synced store details, never for sending mail.
+     */
+    public function getGeneralContactEmail(string $scopeType = ScopeInterface::SCOPE_STORE, ?string $scopeCode = null): string
     {
-        return (string) $this->scopeConfig->getValue(self::XML_PATH_STORE_CONTEXT, $scopeType, $scopeCode);
+        return trim((string) $this->scopeConfig->getValue('trans_email/ident_general/email', $scopeType, $scopeCode));
     }
 
     public function getApiUrl(string $scopeType = ScopeInterface::SCOPE_STORE, ?string $scopeCode = null): string
@@ -102,14 +105,6 @@ class Config
         return (string) $this->scopeConfig->getValue(self::XML_PATH_POSITION, $scopeType, $scopeCode) ?: 'bottom-right';
     }
 
-    /**
-     * Returns the merchant-configured brand colour, or empty string when not set.
-     * Empty string signals the widget to fall back to the dashboard setting.
-     */
-    public function getBrandColor(string $scopeType = ScopeInterface::SCOPE_STORE, ?string $scopeCode = null): string
-    {
-        return (string) $this->scopeConfig->getValue(self::XML_PATH_COLOR, $scopeType, $scopeCode);
-    }
 
     public function isSyncProducts(string $scopeType = ScopeInterface::SCOPE_STORE, ?string $scopeCode = null): bool
     {

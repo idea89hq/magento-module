@@ -78,7 +78,8 @@ class Facade
      *     grand_total: string,
      *     methods: array<int, array{code: string, title: string}>,
      *     needs_shipping: bool,
-     *     allowed_countries: array<int, array{code: string, name: string}>
+     *     allowed_countries: array<int, array{code: string, name: string}>,
+     *     default_country: string
      * }
      */
     public function context(): array
@@ -100,6 +101,7 @@ class Facade
             'methods'           => $methods,
             'needs_shipping'    => !$quote->isVirtual(),
             'allowed_countries' => $this->allowedCountries(),
+            'default_country'   => $this->defaultCountry($quote),
         ];
     }
 
@@ -294,6 +296,24 @@ class Facade
             $methods[$code] = (string) $method->getTitle();
         }
         return $methods;
+    }
+
+    /**
+     * The country the delivery form starts on.
+     */
+    private function defaultCountry(Quote $quote): string
+    {
+        // The country the delivery form starts on: the quote's own shipping
+        // country when it has one (a signed-in customer's address, or a
+        // country the shopper already chose in the cart's estimator), else
+        // the store's default country. '' when neither is a 2-letter code;
+        // the widget then starts on the first allowed country.
+        $shipping = $quote->getShippingAddress();
+        $code = $shipping ? strtoupper(trim((string) $shipping->getCountryId())) : '';
+        if (!preg_match('/^[A-Z]{2}$/', $code)) {
+            $code = strtoupper(trim((string) $this->scopeConfig->getValue('general/country/default', ScopeInterface::SCOPE_STORE)));
+        }
+        return preg_match('/^[A-Z]{2}$/', $code) ? $code : '';
     }
 
     /**

@@ -89,16 +89,12 @@ class Locator extends Template
     }
 
     /**
-     * Brand colour fallback chain: Magento admin override (widget/brand_color)
-     * → dashboard cfg JSON brandColor → IDEA89 emerald (handled in template).
-     * Per the locked design rule "Magento overrides dashboard when non-empty".
+     * The dashboard's brand colour (cfg JSON brandColor), or null for the
+     * IDEA89 emerald (handled in the template). The colour is set in the
+     * IDEA89 dashboard only; the module's own Brand Colour field was removed.
      */
     public function getBrandColor(): ?string
     {
-        $override = $this->config->getBrandColor();
-        if ($override !== '') {
-            return $override;
-        }
         return $this->getMapCfg()['brandColor'];
     }
 
