@@ -2,7 +2,7 @@
     "name": "idea89/magento2-assistant",
     "description": "AI shopping assistant for Magento 2 — answers product questions, recommends what to buy, surfaces promotions. 5-minute install.",
     "type": "magento2-module",
-    "version": "1.6.0",
+    "version": "1.7.0",
     "license": "OSL-3.0",
     "homepage": "https://idea89.com",
     "authors": [
@@ -40,6 +40,7 @@
         "magento/module-eav": "102.*",
         "magento/module-tax": "100.*",
         "magento/module-checkout": "100.*",
+        "magento/module-checkout-agreements": "100.*",
         "magento/module-cms": "104.*",
         "magento/module-config": "101.*||102.*",
         "magento/module-csp": "100.*||101.*",

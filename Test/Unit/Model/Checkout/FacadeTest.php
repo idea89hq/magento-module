@@ -71,6 +71,16 @@ class FacadeTest extends TestCase
 
     private Facade $facade;
 
+    /** @var \Magento\CheckoutAgreements\Api\CheckoutAgreementsListInterface&MockObject */
+    private $agreementsList;
+
+    private function agreementsFilter(): \Magento\CheckoutAgreements\Model\Api\SearchCriteria\ActiveStoreAgreementsFilter
+    {
+        $filter = $this->createMock(\Magento\CheckoutAgreements\Model\Api\SearchCriteria\ActiveStoreAgreementsFilter::class);
+        $filter->method('buildSearchCriteria')->willReturn($this->createMock(\Magento\Framework\Api\SearchCriteriaInterface::class));
+        return $filter;
+    }
+
     protected function setUp(): void
     {
         $this->checkoutSession   = $this->createMock(CheckoutSession::class);
@@ -108,7 +118,10 @@ class FacadeTest extends TestCase
             $this->paymentConfig,
             $this->scopeConfig,
             $this->countrySource,
-            $this->currencyFactory
+            $this->currencyFactory,
+            $this->createMock(\Magento\SalesRule\Model\CouponFactory::class),
+            $this->agreementsList = $this->createMock(\Magento\CheckoutAgreements\Api\CheckoutAgreementsListInterface::class),
+            $this->agreementsFilter()
         );
     }
 
@@ -208,6 +221,108 @@ class FacadeTest extends TestCase
         $this->stubActiveMethods([]);
         $this->scopeConfig->method('getValue')->willReturnCallback(fn ($path) => $config[$path] ?? null);
         return $this->facade->context()['default_country'];
+    }
+
+    public function testContextPrefillIsWhatIsAlreadyOnTheQuote(): void
+    {
+        $quote = $this->createMock(Quote::class);
+        $quote->method('getItemsCount')->willReturn(1);
+        $quote->method('isVirtual')->willReturn(false);
+        $quote->method('getData')->willReturnCallback(fn ($key = '') => $key === 'customer_email' ? 'sam@example.com' : null);
+        $address = $this->createMock(QuoteAddress::class);
+        $address->method('getFirstname')->willReturn('Sam');
+        $address->method('getLastname')->willReturn('');
+        $address->method('getStreet')->willReturn(['1 High Street', '']);
+        $address->method('getCity')->willReturn('Leeds');
+        $address->method('getPostcode')->willReturn('LS1 1AA');
+        $address->method('getCountryId')->willReturn('gb');
+        $quote->method('getShippingAddress')->willReturn($address);
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->checkoutConfig->method('getNativeMethods')->willReturn([]);
+        $this->stubActiveMethods([]);
+
+        $this->assertSame([
+            'email' => 'sam@example.com', 'firstname' => 'Sam', 'street' => '1 High Street',
+            'city' => 'Leeds', 'postcode' => 'LS1 1AA', 'country_id' => 'GB',
+        ], $this->facade->context()['prefill']);
+    }
+
+    public function testSetAddressRefusesAPhoneNumberMagentoWouldRefuseAtPlaceOrder(): void
+    {
+        // Owner report 2026-10-26: "07448049454q" passed the address step and
+        // the order was then refused, sending the shopper to the checkout page.
+        $quote = $this->createMock(Quote::class);
+        $quote->expects($this->never())->method('save');
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->cartRepository->expects($this->never())->method('save');
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage('Enter a phone number using numbers, spaces and + - ( ) . /');
+        $this->facade->setAddress(['postcode' => 'M27 8QW', 'country_id' => 'GB', 'street' => '1 Road', 'telephone' => '07448049454q']);
+    }
+
+    public function testSetAddressNeedsAPhoneWhenTheStoreRequiresOne(): void
+    {
+        $this->scopeConfig->method('getValue')->willReturnCallback(fn ($path) => $path === 'customer/address/telephone_show' ? 'req' : null);
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage('Enter a phone number.');
+        $this->facade->setAddress(['postcode' => 'M27 8QW', 'country_id' => 'GB', 'street' => '1 Road']);
+    }
+
+    public function testContextSaysWhetherThePhoneIsRequired(): void
+    {
+        $quote = $this->createMock(Quote::class);
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->checkoutConfig->method('getNativeMethods')->willReturn([]);
+        $this->stubActiveMethods([]);
+        $this->scopeConfig->method('getValue')->willReturnCallback(fn ($path) => $path === 'customer/address/telephone_show' ? 'opt' : null);
+        $this->assertFalse($this->facade->context()['phone_required']);
+    }
+
+    /**
+     * @param array<int, array{0:int,1:string,2:string,3:string,4:bool,5:int}> $rows id, name, checkbox, content, html, mode
+     */
+    private function stubAgreements(bool $enabled, array $rows): void
+    {
+        $this->scopeConfig->method('isSetFlag')->willReturnCallback(fn ($path) => $path === 'checkout/options/enable_agreements' && $enabled);
+        $list = [];
+        foreach ($rows as [$id, $name, $box, $content, $html, $mode]) {
+            $a = $this->createMock(\Magento\CheckoutAgreements\Api\Data\AgreementInterface::class);
+            $a->method('getAgreementId')->willReturn($id);
+            $a->method('getName')->willReturn($name);
+            $a->method('getCheckboxText')->willReturn($box);
+            $a->method('getContent')->willReturn($content);
+            $a->method('getIsHtml')->willReturn($html);
+            $a->method('getMode')->willReturn($mode);
+            $list[] = $a;
+        }
+        $this->agreementsList->method('getList')->willReturn($list);
+    }
+
+    public function testAgreementsAreTheStoresOwnAsPlainText(): void
+    {
+        $this->stubAgreements(true, [
+            [3, 'Terms of sale', 'I agree to the terms of sale', '<p>Returns within <b>30</b> days.</p><ul><li>One</li><li>Two &amp; three</li></ul>', true, 1],
+            [4, 'Privacy', '', 'We keep your data safe.', false, 0],
+        ]);
+        $this->assertSame([
+            ['id' => '3', 'title' => 'Terms of sale', 'label' => 'I agree to the terms of sale', 'content' => "Returns within 30 days.\n- One\n- Two & three", 'manual' => true],
+            ['id' => '4', 'title' => 'Privacy', 'label' => 'Privacy', 'content' => 'We keep your data safe.', 'manual' => false],
+        ], $this->facade->agreements());
+    }
+
+    public function testAgreementsAreEmptyWhenTheStoreHasThemOff(): void
+    {
+        $this->stubAgreements(false, [[3, 'Terms', 'Agree', 'x', false, 1]]);
+        $this->assertSame([], $this->facade->agreements());
+    }
+
+    public function testPlaceRefusesUntilEveryTickBoxAgreementIsTicked(): void
+    {
+        $this->stubAgreements(true, [[3, 'Terms', 'Agree', 'x', false, 1], [4, 'Privacy', '', 'y', false, 0]]);
+        $this->cartManagement->expects($this->never())->method('placeOrder');
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage('Tick the box to agree to the terms and conditions.');
+        $this->facade->place('checkmo', ['4']);
     }
 
     public function testDefaultCountryIsTheQuotesShippingCountryWhenSet(): void
@@ -330,6 +445,7 @@ class FacadeTest extends TestCase
             'postcode'   => '90210',
             'country_id' => 'US',
             'street'     => '123 Main St',
+            'telephone'  => '555 0100',
         ]);
 
         $this->assertFalse($result['needs_shipping']);
@@ -455,6 +571,7 @@ class FacadeTest extends TestCase
             'postcode'   => '90210',
             'country_id' => 'US',
             'street'     => '123 Main St',
+            'telephone'  => '555 0100',
         ]);
     }
 
@@ -482,11 +599,12 @@ class FacadeTest extends TestCase
         // version, now that addMethods() (the old workaround) is gone.
         $shippingAddress = $this->createMock(QuoteAddress::class);
         $magicCalls = [];
-        $shippingAddress->expects($this->exactly(2))
+        // Two setters, then the totals breakdown's magic getters (amounts).
+        $shippingAddress->expects($this->atLeast(2))
             ->method('__call')
             ->willReturnCallback(function ($name, $args) use (&$magicCalls, $shippingAddress) {
                 $magicCalls[] = [$name, $args];
-                return $shippingAddress;
+                return str_starts_with($name, 'get') ? null : $shippingAddress;
             });
 
         $quote = $this->createMock(Quote::class);
@@ -503,7 +621,115 @@ class FacadeTest extends TestCase
 
         $this->assertContains(['setShippingMethod', ['flatrate_flatrate']], $magicCalls);
         $this->assertContains(['setCollectShippingRates', [true]], $magicCalls);
-        $this->assertSame(['totals' => ['subtotal' => '10.00', 'grand_total' => '15.00']], $result);
+        // Old keys unchanged for older widgets, plus the breakdown.
+        $this->assertSame('10.00', $result['totals']['subtotal']);
+        $this->assertSame('15.00', $result['totals']['grand_total']);
+        $this->assertSame('15.00', $result['totals']['breakdown']['grand_total']);
+        $this->assertNull($result['totals']['breakdown']['discount']);
+    }
+
+    public function testTotalsBreakdownOnAnInclusiveStoreWithACoupon(): void
+    {
+        $address = $this->createMock(QuoteAddress::class);
+        $address->method('__call')->willReturnCallback(fn ($name) => match ($name) {
+            'getShippingMethod' => 'flatrate_flatrate',
+            'getShippingDescription' => 'Flat Rate - Fixed',
+            'getDiscountAmount' => -9.25,
+            'getDiscountDescription' => 'WELCOME10',
+            'getTaxAmount' => 16.96,
+            'getSubtotalInclTax' => 111.0,
+            'getShippingInclTax' => 5.0,
+            default => null,
+        });
+        $address->method('getShippingMethod')->willReturn('flatrate_flatrate');
+        $quote = $this->createMock(Quote::class);
+        $quote->method('isVirtual')->willReturn(false);
+        $quote->method('getShippingAddress')->willReturn($address);
+        $quote->method('__call')->willReturnCallback(fn ($name) => $name === 'getCouponCode' ? 'WELCOME10' : null);
+        $quote->method('getData')->willReturnMap([['subtotal', null, 92.5], ['grand_total', null, 106.75]]);
+        $quote->method('getItemsCount')->willReturn(1);
+        $this->scopeConfig->method('getValue')->willReturnCallback(fn ($path) => $path === 'tax/cart_display/subtotal' ? '2' : null);
+        $this->paymentConfig->method('getActiveMethods')->willReturn([]);
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+
+        $bd = $this->facade->context()['totals']['breakdown'];
+
+        // Inclusive basis: subtotal + shipping + discount = grand total; VAT inside.
+        $this->assertSame('incl', $bd['basis']);
+        $this->assertSame('111.00', $bd['subtotal']);
+        $this->assertSame('5.00', $bd['shipping']);
+        $this->assertSame('-9.25', $bd['discount']);
+        $this->assertSame('16.96', $bd['tax']);
+        $this->assertSame('WELCOME10', $bd['coupon_code']);
+        $this->assertSame('106.75', $bd['grand_total']);
+    }
+
+    public function testApplyCouponRejectsABlankCodeBeforeTouchingTheQuote(): void
+    {
+        $this->checkoutSession->expects($this->never())->method('getQuote');
+        $this->expectException(LocalizedException::class);
+        $this->facade->applyCoupon('   ');
+    }
+
+    public function testAnInvalidCouponPutsThePreviousCodeBackAndSaysSo(): void
+    {
+        $codes = [];
+        $current = 'OLD5';
+        $address = $this->createMock(QuoteAddress::class);
+        $address->method('__call')->willReturnCallback(fn ($name) => str_starts_with($name, 'get') ? null : $address);
+        $quote = $this->createMock(Quote::class);
+        $quote->method('getItemsCount')->willReturn(1);
+        $quote->method('isVirtual')->willReturn(false);
+        $quote->method('getShippingAddress')->willReturn($address);
+        $quote->method('__call')->willReturnCallback(function ($name, $args) use (&$codes, &$current, $quote) {
+            if ($name === 'setCouponCode') { $codes[] = $args[0]; $current = $args[0] === 'BAD' ? '' : $args[0]; return $quote; }
+            if ($name === 'getCouponCode') { return $current; }
+            return null;
+        });
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+
+        try {
+            $this->facade->applyCoupon('BAD');
+            $this->fail('expected the code to be refused');
+        } catch (LocalizedException $e) {
+            $this->assertStringContainsString('"BAD" is not valid', $e->getMessage());
+        }
+        // Tried, then the previous code restored.
+        $this->assertSame(['BAD', 'OLD5'], $codes);
+    }
+
+    public function testAValidCouponIsAppliedInTheStoresOwnSpelling(): void
+    {
+        $current = '';
+        $address = $this->createMock(QuoteAddress::class);
+        $address->method('__call')->willReturnCallback(fn ($name) => str_starts_with($name, 'get') ? null : $address);
+        $quote = $this->createMock(Quote::class);
+        $quote->method('getItemsCount')->willReturn(1);
+        $quote->method('isVirtual')->willReturn(false);
+        $quote->method('getShippingAddress')->willReturn($address);
+        $quote->method('getData')->willReturnMap([['subtotal', null, 10.0], ['grand_total', null, 9.0]]);
+        $quote->method('__call')->willReturnCallback(function ($name, $args) use (&$current, $quote) {
+            if ($name === 'setCouponCode') { $current = $args[0]; return $quote; }
+            return $name === 'getCouponCode' ? $current : null;
+        });
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $coupon = $this->createMock(\Magento\SalesRule\Model\Coupon::class);
+        $coupon->method('loadByCode')->willReturnSelf();
+        $coupon->method('getCode')->willReturn('WELCOME10');
+        $factory = $this->createMock(\Magento\SalesRule\Model\CouponFactory::class);
+        $factory->method('create')->willReturn($coupon);
+        $facade = new Facade(
+            $this->checkoutSession, $this->customerSession, $this->cartRepository, $this->shippingEstimator,
+            $this->cartManagement, $this->addressFactory, $this->checkoutConfig, $this->paymentConfig,
+            $this->scopeConfig, $this->countrySource, $this->currencyFactory, $factory,
+            $this->agreementsList,
+            $this->agreementsFilter()
+        );
+
+        $result = $facade->applyCoupon('welcome10');
+
+        $this->assertSame('WELCOME10', $current);
+        $this->assertSame('WELCOME10', $result['totals']['breakdown']['coupon_code']);
     }
 
     public function testSetShippingMethodRejectsABlankCarrierOrMethodBeforeTouchingTheQuote(): void

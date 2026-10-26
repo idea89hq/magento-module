@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-26
+
+### Added
+- **Product image gallery for the chat.** `GET /idea89/product/gallery?id=` (or `?sku=`)
+  returns a product's enabled gallery images at the theme's large product-page
+  size, in the merchant's order, at most 12, videos left out. The chat asks for it
+  only when a shopper presses a card's enlarge button. Same gates as the mini
+  product page (module enabled, shown in the store view, on this website); public
+  caching for five minutes.
+- **Terms and Conditions in the in-chat checkout.** When the store has them
+  on (Sales > Checkout > Checkout Options), `context` lists the active Terms
+  and Conditions for the store view (HTML flattened to text), the chat shows
+  a tick box for each manual one, and `POST /idea89/checkout/place` refuses
+  the order until every manual one is in `agreement_ids`. Now depends on
+  `Magento_CheckoutAgreements` (core).
+- **Phone numbers by Magento's own rules.** `context` returns
+  `phone_required` (Customers > Address Templates > Show Telephone; core's
+  default is required) and `POST /idea89/checkout/address` refuses a blank
+  required phone or one with characters Magento rejects, instead of the
+  order being refused at Place order.
+- **The in-chat checkout remembers the shopper's details.** `GET /idea89/checkout/context`
+  now returns `prefill`: the email and delivery details already on this
+  shopper's own basket session, so the chat form opens filled in after a
+  page refresh or a visit to the store's own checkout page.
+- **Discount codes in the in-chat checkout.** `POST /idea89/checkout/coupon`
+  (`{code}` to apply, `{remove: true}` to take off) runs the store's own cart
+  price rules on the shopper's own quote, shows the code in the store's own
+  spelling, and puts the previous code back when a code is refused. Same
+  origin check, form key and rate limit as the other checkout endpoints.
+- **Full order totals in the in-chat checkout.** Every checkout response now
+  carries `totals.breakdown`: subtotal, delivery, discount, tax and total on
+  the store's own cart display basis (Display Subtotal including or excluding
+  tax), so the lines add up exactly as the store's cart page does. `subtotal`
+  and `grand_total` are unchanged for older widgets.
+- The storefront checkout config now includes the store view code, so the
+  widget can hand what the shopper typed in chat to the store's own checkout
+  page, part-filled forms included.
+
+### Changed
+- `/idea89/checkout/context` recalculates the basket's totals before
+  answering, so a price, rule or tax change shows at once.
+
 ## [1.6.0] - 2026-10-17
 
 ### Added

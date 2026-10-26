@@ -103,10 +103,23 @@ class Widget extends Template
                 // (class-idea89-widget.php) — the widget reads one
                 // platform-neutral ckCfg.checkoutBar boolean either way.
                 'checkoutBar'      => $this->checkoutConfig->isCheckoutBarEnabled(),
+                // Magento keeps the checkout form's saved values per store
+                // view; the widget writes what the shopper typed in chat
+                // under this key so the full checkout page opens filled in.
+                'storeCode'        => $this->storeCode(),
             ],
             JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
         );
 
         return "window.__IDEA89_PLATFORM='magento2';window.__IDEA89_CHECKOUT={$payload};";
+    }
+
+    private function storeCode(): string
+    {
+        try {
+            return (string) $this->_storeManager->getStore()->getCode();
+        } catch (\Throwable $e) {
+            return 'default';
+        }
     }
 }

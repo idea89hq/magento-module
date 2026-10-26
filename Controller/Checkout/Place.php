@@ -94,7 +94,9 @@ class Place implements HttpPostActionInterface, CsrfAwareActionInterface
         $paymentMethod = $this->stringField($body, 'payment_method');
 
         try {
-            return $result->setData($this->facade->place($paymentMethod));
+            $ids = isset($body['agreement_ids']) && is_array($body['agreement_ids'])
+                ? array_values(array_filter($body['agreement_ids'], 'is_scalar')) : [];
+            return $result->setData($this->facade->place($paymentMethod, $ids));
         } catch (LocalizedException $e) {
             // Expected shopper-facing outcome, not a fault — not logged as
             // an error. Facade's own contract: every message here is

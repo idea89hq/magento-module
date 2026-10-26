@@ -24,6 +24,9 @@ use Magento\Directory\Model\CurrencyFactory;
 use Magento\Quote\Api\ShipmentEstimationInterface;
 use Magento\Quote\Model\Quote;
 use Magento\Store\Model\ScopeInterface;
+use Magento\SalesRule\Model\CouponFactory;
+use Magento\CheckoutAgreements\Api\CheckoutAgreementsListInterface;
+use Magento\CheckoutAgreements\Model\Api\SearchCriteria\ActiveStoreAgreementsFilter;
 
 /**
  * The only door onto the quote for Tier 3 (native checkout). Every
@@ -65,8 +68,69 @@ class Facade
         // Appended rather than inserted: the constructor is called
         // positionally in the unit tests, so a new argument in the middle
         // silently reassigns every dependency after it.
-        private readonly CurrencyFactory $currencyFactory
+        private readonly CurrencyFactory $currencyFactory,
+        // Appended for the same reason: the store's own spelling of a code.
+        private readonly CouponFactory $couponFactory,
+        // The store's own Terms and Conditions (Stores > Terms and Conditions).
+        private readonly CheckoutAgreementsListInterface $agreementsList,
+        private readonly ActiveStoreAgreementsFilter $activeAgreementsFilter
     ) {}
+
+    /**
+     * The store's active Terms and Conditions for this store view, when the
+     * merchant has turned them on (Sales > Checkout > Checkout Options >
+     * Enable Terms and Conditions), the same list Magento's own checkout
+     * shows. 'manual' ones need the shopper to tick a box; the others are
+     * shown as a line of text. Content is plain text: HTML content is
+     * flattened here so the widget never renders merchant markup.
+     *
+     * @return array<int, array{id: string, title: string, label: string, content: string, manual: bool}>
+     */
+    public function agreements(): array
+    {
+        if (!$this->scopeConfig->isSetFlag('checkout/options/enable_agreements', ScopeInterface::SCOPE_STORE)) {
+            return [];
+        }
+        try {
+            $list = $this->agreementsList->getList($this->activeAgreementsFilter->buildSearchCriteria());
+        } catch (\Throwable $e) {
+            return [];
+        }
+        $out = [];
+        foreach ($list as $agreement) {
+            $content = (string) $agreement->getContent();
+            if ($agreement->getIsHtml()) {
+                $content = $this->htmlToText($content);
+            }
+            $title = trim((string) $agreement->getName());
+            $label = trim((string) $agreement->getCheckboxText());
+            $out[] = [
+                'id'      => (string) $agreement->getAgreementId(),
+                'title'   => $title,
+                'label'   => $label !== '' ? $label : $title,
+                'content' => trim($content),
+                'manual'  => (int) $agreement->getMode() === 1,
+            ];
+        }
+        return $out;
+    }
+
+    private function phoneRequired(): bool
+    {
+        $show = $this->scopeConfig->getValue('customer/address/telephone_show', ScopeInterface::SCOPE_STORE);
+        // Unset means core's own default, which is 'req'.
+        return $show === null || (string) $show === 'req';
+    }
+
+        private function htmlToText(string $html): string
+    {
+        $html = (string) preg_replace('#<\s*br\s*/?>#i', "\n", $html);
+        $html = (string) preg_replace('#</\s*(p|div|li|h[1-6]|tr|ul|ol)\s*>#i', "\n", $html);
+        $html = (string) preg_replace('#<\s*li[^>]*>#i', '- ', $html);
+        $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = (string) preg_replace("/[ \t]+/", ' ', $text);
+        return (string) preg_replace("/\n\s*\n\s*(\n\s*)+/", "\n\n", $text);
+    }
 
     /**
      * @return array{
@@ -85,6 +149,14 @@ class Facade
     public function context(): array
     {
         $quote = $this->checkoutSession->getQuote();
+        // Fresh figures: the stored totals can predate a price, rule or tax
+        // change (the basket step showed a pre-VAT total once VAT was set
+        // up). Recalculated in memory only; nothing is saved by a GET.
+        try {
+            $quote->collectTotals();
+        } catch (\Throwable $e) {
+            // Stored totals are still a reasonable answer.
+        }
 
         $methods = [];
         foreach ($this->allowedMethods() as $code => $title) {
@@ -99,10 +171,52 @@ class Facade
             'subtotal'          => $this->formatAmount((float) $quote->getData('subtotal')),
             'grand_total'       => $this->formatAmount((float) $quote->getData('grand_total')),
             'methods'           => $methods,
+            // The full breakdown and the applied discount code, so the basket
+            // step can show what the order costs before any address.
+            'totals'            => $this->totals($quote),
+            'coupons'           => true,
             'needs_shipping'    => !$quote->isVirtual(),
             'allowed_countries' => $this->allowedCountries(),
             'default_country'   => $this->defaultCountry($quote),
+            // What this shopper already gave for this basket, so the chat
+            // form opens filled in after a page refresh or a visit to the
+            // store's own checkout page.
+            'prefill'           => $this->prefill($quote),
+            // The store's Terms and Conditions, shown before Place order.
+            'agreements'        => $this->agreements(),
+            // Customers > Address Templates > Show Telephone; Magento's own
+            // default is required, and placeOrder() refuses a blank one.
+            'phone_required'    => $this->phoneRequired(),
         ];
+    }
+
+    /**
+     * The email and delivery details already on this session's quote. The
+     * quote is bound to the shopper's own session, so this only ever returns
+     * what they typed (or their signed-in account holds). Empty fields are
+     * left out.
+     *
+     * @return array<string,string>
+     */
+    private function prefill(Quote $quote): array
+    {
+        $address = $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
+        $street = $address !== null ? $address->getStreet() : [];
+        $email = trim((string) $quote->getData('customer_email'));
+        if ($email === '' && $address !== null) {
+            $email = trim((string) $address->getEmail());
+        }
+        $out = [
+            'email'      => $email,
+            'firstname'  => $address !== null ? trim((string) $address->getFirstname()) : '',
+            'lastname'   => $address !== null ? trim((string) $address->getLastname()) : '',
+            'street'     => is_array($street) && isset($street[0]) ? trim((string) $street[0]) : '',
+            'city'       => $address !== null ? trim((string) $address->getCity()) : '',
+            'postcode'   => $address !== null ? trim((string) $address->getPostcode()) : '',
+            'country_id' => $address !== null ? strtoupper(trim((string) $address->getCountryId())) : '',
+            'telephone'  => $address !== null ? trim((string) $address->getTelephone()) : '',
+        ];
+        return array_filter($out, static fn (string $v): bool => $v !== '');
     }
 
     /**
@@ -131,6 +245,15 @@ class Facade
             if (!$validator->isValid($email)) {
                 throw new LocalizedException(__('Enter a valid email address.'));
             }
+        }
+        // Magento's own rule for a telephone (refused only at placeOrder
+        // otherwise, after the shopper has been told the address is fine).
+        $telephone = isset($payload['telephone']) ? trim((string) $payload['telephone']) : '';
+        if ($telephone === '' && $this->phoneRequired()) {
+            throw new LocalizedException(__('Enter a phone number.'));
+        }
+        if ($telephone !== '' && !preg_match('#^[\d\s+().\/ -]+$#u', $telephone)) {
+            throw new LocalizedException(__('Enter a phone number using numbers, spaces and + - ( ) . /'));
         }
 
         $address = $this->buildAddress($payload, $email);
@@ -221,11 +344,99 @@ class Facade
     }
 
     /**
+     * Apply a discount code to the shopper's own quote. Magento's own cart
+     * price rules decide whether it is valid; a code they reject leaves the
+     * quote exactly as it was. Same mechanism as the cart page's "Apply
+     * Discount Code" (CouponManagement::set does the same on a cart id).
+     *
+     * @return array{totals: array<string, mixed>}
+     * @throws LocalizedException
+     */
+    public function applyCoupon(string $code): array
+    {
+        $code = trim($code);
+        if ($code === '') {
+            throw new LocalizedException(__('Enter a discount code.'));
+        }
+        if (mb_strlen($code) > 255) {
+            throw new LocalizedException(__('That discount code is not valid.'));
+        }
+        $quote = $this->checkoutSession->getQuote();
+        if (!$quote->getItemsCount()) {
+            throw new LocalizedException(__('Your cart is empty.'));
+        }
+        try {
+            $previous = (string) $quote->getCouponCode();
+            // The store's own spelling ("WELCOME10"), whatever the shopper
+            // typed: Magento matches codes case-insensitively but shows them
+            // as they are stored.
+            $code = $this->storedCouponCode($code) ?? $code;
+            $this->recollect($quote, $code);
+            if (strcasecmp((string) $quote->getCouponCode(), $code) !== 0) {
+                // Rejected by the rules: put the previous code back.
+                $this->recollect($quote, $previous);
+                throw new LocalizedException(__('The code "%1" is not valid, or does not apply to this basket.', $code));
+            }
+            return ['totals' => $this->totals($quote)];
+        } catch (LocalizedException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            throw new LocalizedException(__('We could not apply that code. Try again.'));
+        }
+    }
+
+    /**
+     * @return array{totals: array<string, mixed>}
+     * @throws LocalizedException
+     */
+    public function removeCoupon(): array
+    {
+        $quote = $this->checkoutSession->getQuote();
+        try {
+            $this->recollect($quote, '');
+            return ['totals' => $this->totals($quote)];
+        } catch (\Throwable $e) {
+            throw new LocalizedException(__('We could not remove that code. Try again.'));
+        }
+    }
+
+    private function storedCouponCode(string $code): ?string
+    {
+        try {
+            $stored = (string) $this->couponFactory->create()->loadByCode($code)->getCode();
+            return $stored !== '' ? $stored : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function recollect(Quote $quote, string $couponCode): void
+    {
+        if (!$quote->isVirtual()) {
+            $quote->getShippingAddress()->setCollectShippingRates(true);
+        }
+        $quote->setCouponCode($couponCode);
+        $quote->collectTotals();
+        $this->cartRepository->save($quote);
+    }
+
+    /**
+     * @param array<int, string|int> $agreementIds Terms and Conditions the shopper ticked.
      * @return array{order_id: string, total: string, currency: string}
      * @throws LocalizedException
      */
-    public function place(string $paymentMethod): array
+    public function place(string $paymentMethod, array $agreementIds = []): array
     {
+        // The store's own Terms and Conditions: every one that needs a tick
+        // must have been ticked. Magento's own checkout enforces this in its
+        // payment-information plugin, which placeOrder() does not go through.
+        $given = array_map('strval', $agreementIds);
+        foreach ($this->agreements() as $agreement) {
+            if ($agreement['manual'] && !in_array($agreement['id'], $given, true)) {
+                throw new LocalizedException(__('Tick the box to agree to the terms and conditions.'));
+            }
+        }
+
         // Re-check server side. Never trust the code the request sent —
         // an empty allowlist here means an empty $allowed array, and this
         // throws for every method, exactly as it should.
@@ -412,13 +623,50 @@ class Facade
     }
 
     /**
-     * @return array{subtotal: string, grand_total: string}
+     * subtotal and grand_total keep their old meaning for older widgets.
+     * breakdown is what the widget shows, every amount from Magento's own
+     * address totals, on the store's own basis so the lines always add up:
+     *
+     *   basis 'incl' (the store's cart shows prices including tax, most UK stores):
+     *     subtotal + shipping + discount = grand_total; tax is the VAT
+     *     already inside those amounts ("Includes £x VAT").
+     *   basis 'excl': subtotal + shipping + discount + tax = grand_total.
+     *
+     * shipping is null until a delivery method is chosen (or nothing ships);
+     * discount is negative and null when none; tax null when none.
+     *
+     * @return array{subtotal: string, grand_total: string, breakdown: array<string, mixed>}
      */
     private function totals(Quote $quote): array
     {
+        $address = $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
+        // The store's own cart display ("Display Subtotal": 1 excluding tax,
+        // 2 including, 3 both), so the chat shows what its cart page shows.
+        $incl = (int) $this->scopeConfig->getValue('tax/cart_display/subtotal', ScopeInterface::SCOPE_STORE) >= 2;
+        // A quote always has an address object in practice; without one the
+        // breakdown is just the subtotal, never an error.
+        $hasMethod = $address !== null && !$quote->isVirtual() && trim((string) $address->getShippingMethod()) !== '';
+        $discount = $address !== null ? (float) $address->getDiscountAmount() : 0.0;
+        $tax = $address !== null ? (float) $address->getTaxAmount() : 0.0;
+        $subtotal = $address === null ? (float) $quote->getData('subtotal')
+            : ($incl ? (float) $address->getSubtotalInclTax() : (float) $address->getSubtotal());
+        $shipping = $address === null ? 0.0
+            : ($incl ? (float) $address->getShippingInclTax() : (float) $address->getShippingAmount());
+        $code = trim((string) $quote->getCouponCode());
         return [
             'subtotal'    => $this->formatAmount((float) $quote->getData('subtotal')),
             'grand_total' => $this->formatAmount((float) $quote->getData('grand_total')),
+            'breakdown'   => [
+                'basis'          => $incl ? 'incl' : 'excl',
+                'subtotal'       => $this->formatAmount($subtotal),
+                'shipping'       => $hasMethod ? $this->formatAmount($shipping) : null,
+                'shipping_label' => $hasMethod ? (string) $address->getShippingDescription() : '',
+                'discount'       => abs($discount) > 0.0001 ? $this->formatAmount($discount) : null,
+                'discount_label' => $address !== null ? trim((string) $address->getDiscountDescription()) : '',
+                'tax'            => abs($tax) > 0.0001 ? $this->formatAmount($tax) : null,
+                'coupon_code'    => $code !== '' ? $code : null,
+                'grand_total'    => $this->formatAmount((float) $quote->getData('grand_total')),
+            ],
         ];
     }
 
