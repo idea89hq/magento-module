@@ -49,6 +49,7 @@ class CheckoutConfig
     private const XML_NATIVE_METHODS = 'idea89/checkout/native_methods';
     private const XML_CHECKOUT_BAR   = 'idea89/checkout/checkout_bar_enabled';
     private const XML_CHECKOUT_UI    = 'idea89/checkout/checkout_ui';
+    private const XML_STRIPE_IN_CHAT = 'idea89/checkout/stripe_in_chat';
     private const XML_ACP_ENABLED    = 'idea89/checkout/acp_enabled';
     private const XML_ACP_FEED       = 'idea89/checkout/acp_feed_enabled';
     private const XML_ACP_SECRET     = 'idea89/checkout/acp_secret';
@@ -154,6 +155,16 @@ class CheckoutConfig
     public function isCheckoutBarEnabled(string $s = ScopeInterface::SCOPE_STORE, ?string $c = null): bool
     {
         return $this->scopeConfig->isSetFlag(self::XML_CHECKOUT_BAR, $s, $c);
+    }
+
+    /**
+     * The merchant's opt-in to card and wallet payments inside the in-chat
+     * checkout, through their own Stripe module. Only the switch: whether
+     * Stripe can actually take the payment is Model\Checkout\StripeInChat.
+     */
+    public function isStripeInChatEnabled(string $s = ScopeInterface::SCOPE_STORE, ?string $c = null): bool
+    {
+        return $this->scopeConfig->isSetFlag(self::XML_STRIPE_IN_CHAT, $s, $c);
     }
 
     public function isAcpEnabled(string $s = ScopeInterface::SCOPE_STORE, ?string $c = null): bool

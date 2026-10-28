@@ -46,6 +46,10 @@
                      is what the admin form falls back to when the API is
                      unreachable, and the widget never reads it. -->
                 <checkout_ui>full</checkout_ui>
+                <!-- Card and wallet payments in the in-chat checkout, through
+                     the merchant's own Stripe module. Off until the merchant
+                     turns it on: it takes real money. -->
+                <stripe_in_chat>0</stripe_in_chat>
                 <!-- ACP is orthogonal to the mode ladder above. acp_enabled
                      defaults OFF on purpose: unlike the ladder's express
                      default, this publishes catalog data to third parties,

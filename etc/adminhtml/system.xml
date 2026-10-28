@@ -315,7 +315,19 @@ Changes you make in the IDEA89 dashboard then reach your storefront when Magento
 <div style="padding:10px 14px;margin:0 0 6px;background:#fdecea;border:1px solid #f5c2c0;border-radius:6px;color:#611a15;font-size:13px;line-height:1.5;">
   <strong>Beta.</strong> On this setting the assistant collects delivery details in the conversation and places the order itself. Start with an offline method and place a test order before offering it to shoppers.
 </div>
-Nothing is selected by default, which means the assistant will not place orders at all, so shoppers get the Express handoff instead. Methods marked <em>works in chat</em> complete without leaving the conversation. Anything else needs the shopper to go to your checkout page to pay, so selecting it gains you nothing here.
+Nothing is selected by default, which means the assistant will not place orders at all, so shoppers get the Express handoff instead. Methods marked <em>works in chat</em> complete without leaving the conversation. Anything else needs the shopper to go to your checkout page to pay, so the assistant never offers it even when selected.
+                    ]]></comment>
+                    <depends>
+                        <field id="mode">native</field>
+                    </depends>
+                </field>
+
+                <field id="stripe_in_chat" translate="label comment" type="select" sortOrder="55" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Card and Wallet Payments in the Chat (Stripe)</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment><![CDATA[
+Lets shoppers pay by card, Apple Pay, Google Pay or Link without leaving the conversation, through your own Stripe module (Stripe's official Magento extension, version 4). Payments, webhooks, Radar rules and orders work exactly as on your checkout page, and card details go straight from Stripe's own fields to Stripe.<br/><br/>
+Needs: the Stripe module installed and <em>enabled</em>, payment action <em>Authorize</em> or <em>Authorize and Capture</em>, and Stripe webhooks set up. Apple Pay also needs your domain registered in your Stripe Dashboard (Settings &gt; Payment method domains), in test mode and in live mode. Place a test order in Stripe test mode before turning this on in live mode.
                     ]]></comment>
                     <depends>
                         <field id="mode">native</field>

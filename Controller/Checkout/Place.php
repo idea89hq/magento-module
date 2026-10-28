@@ -27,6 +27,9 @@ use Psr\Log\LoggerInterface;
 
 /**
  * POST /idea89/checkout/place  { "payment_method": "checkmo", "form_key": "…" }
+ *   Stripe in the chat adds "confirmation_token": "ctoken_…", and may get
+ *   back { "requires_action": true, "client_secret": "…" } (3-D Secure: no
+ *   order yet; authenticate in the browser and post the same body again).
  *
  * The order-placing rung of Tier 3 (native) checkout. This is the one call
  * in the four that spends the shopper's money, which is why it alone uses
@@ -96,7 +99,10 @@ class Place implements HttpPostActionInterface, CsrfAwareActionInterface
         try {
             $ids = isset($body['agreement_ids']) && is_array($body['agreement_ids'])
                 ? array_values(array_filter($body['agreement_ids'], 'is_scalar')) : [];
-            return $result->setData($this->facade->place($paymentMethod, $ids));
+            // Only for Stripe in the chat: the ConfirmationToken Stripe.js
+            // made from Stripe's own fields. Facade checks its shape.
+            $token = $this->stringField($body, 'confirmation_token');
+            return $result->setData($this->facade->place($paymentMethod, $ids, $token));
         } catch (LocalizedException $e) {
             // Expected shopper-facing outcome, not a fault — not logged as
             // an error. Facade's own contract: every message here is

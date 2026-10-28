@@ -440,6 +440,23 @@ class PlaceTest extends TestCase
         $b['controller']->execute();
     }
 
+    public function testTheStripeConfirmationTokenIsPassedToTheFacade(): void
+    {
+        $b = $this->build(
+            self::SAME_ORIGIN,
+            true,
+            CheckoutConfig::MODE_NATIVE,
+            true,
+            ['skipDefaultStub' => true],
+            (string) json_encode(['payment_method' => 'stripe_payments', 'confirmation_token' => 'ctoken_1AbCdEfGhIjK'])
+        );
+        $b['facade']->expects($this->once())->method('place')
+            ->with('stripe_payments', [], 'ctoken_1AbCdEfGhIjK')
+            ->willReturn(['requires_action' => true, 'client_secret' => 'pi_1_secret_2']);
+
+        $b['controller']->execute();
+    }
+
     // --- Round 2: the IP bucket's identity must come from RemoteAddress ---
 
     /**

@@ -17,6 +17,10 @@ use Magento\Directory\Model\CurrencyFactory;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Payment\Model\Config as PaymentConfig;
+use Idea89\Assistant\Model\Checkout\StripeInChat;
+use Magento\Framework\UrlInterface;
+use Magento\Sales\Api\OrderRepositoryInterface;
+use Magento\Sales\Model\Order;
 use Magento\Payment\Model\MethodInterface;
 use Magento\Quote\Api\CartManagementInterface;
 use Magento\Quote\Api\CartRepositoryInterface;
@@ -71,6 +75,15 @@ class FacadeTest extends TestCase
 
     private Facade $facade;
 
+    /** @var StripeInChat&MockObject */
+    private $stripeInChat;
+
+    /** @var OrderRepositoryInterface&MockObject */
+    private $orderRepository;
+
+    /** @var UrlInterface&MockObject */
+    private $url;
+
     /** @var \Magento\CheckoutAgreements\Api\CheckoutAgreementsListInterface&MockObject */
     private $agreementsList;
 
@@ -121,7 +134,10 @@ class FacadeTest extends TestCase
             $this->currencyFactory,
             $this->createMock(\Magento\SalesRule\Model\CouponFactory::class),
             $this->agreementsList = $this->createMock(\Magento\CheckoutAgreements\Api\CheckoutAgreementsListInterface::class),
-            $this->agreementsFilter()
+            $this->agreementsFilter(),
+            $this->stripeInChat = $this->createMock(StripeInChat::class),
+            $this->orderRepository = $this->createMock(OrderRepositoryInterface::class),
+            $this->url = $this->createMock(UrlInterface::class)
         );
     }
 
@@ -133,10 +149,13 @@ class FacadeTest extends TestCase
         $this->paymentConfig->method('getActiveMethods')->willReturn($activeMethods);
     }
 
-    private function makeMethod(string $code, string $title): MethodInterface
+    private function makeMethod(string $code, string $title, bool $offline = true, bool $available = true): MethodInterface
     {
         $method = $this->createMock(MethodInterface::class);
+        $method->method('getCode')->willReturn($code);
         $method->method('getTitle')->willReturn($title);
+        $method->method('isOffline')->willReturn($offline);
+        $method->method('isAvailable')->willReturn($available);
         return $method;
     }
 
@@ -175,6 +194,47 @@ class FacadeTest extends TestCase
             'braintree' => $this->makeMethod('braintree', 'Credit Card (Braintree)'),
         ]);
         $this->checkoutConfig->method('getNativeMethods')->willReturn(['checkmo', 'freeshipping']);
+
+        $context = $this->facade->context();
+
+        $this->assertSame([['code' => 'checkmo', 'title' => 'Check / Money order']], $context['methods']);
+    }
+
+    public function testContextNeverOffersAnAllowlistedMethodThatTakesPaymentElsewhere(): void
+    {
+        $quote = $this->createMock(Quote::class);
+        $quote->method('getItemsCount')->willReturn(1);
+        $quote->method('isVirtual')->willReturn(false);
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->customerSession->method('isLoggedIn')->willReturn(false);
+
+        // Stripe's redirect flow, ticked by the merchant: placing the order
+        // from the chat would leave it unpaid in pending_payment.
+        $this->stubActiveMethods([
+            'checkmo'                  => $this->makeMethod('checkmo', 'Check / Money order'),
+            'stripe_payments_checkout' => $this->makeMethod('stripe_payments_checkout', 'Pay online', false),
+        ]);
+        $this->checkoutConfig->method('getNativeMethods')->willReturn(['checkmo', 'stripe_payments_checkout']);
+
+        $context = $this->facade->context();
+
+        $this->assertSame([['code' => 'checkmo', 'title' => 'Check / Money order']], $context['methods']);
+    }
+
+    public function testContextLeavesOutAMethodTheCartCannotUse(): void
+    {
+        $quote = $this->createMock(Quote::class);
+        $quote->method('getItemsCount')->willReturn(1);
+        $quote->method('isVirtual')->willReturn(false);
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->customerSession->method('isLoggedIn')->willReturn(false);
+
+        // "No Payment Information Required" on an £83 basket.
+        $this->stubActiveMethods([
+            'free'    => $this->makeMethod('free', 'No Payment Information Required', true, false),
+            'checkmo' => $this->makeMethod('checkmo', 'Check / Money order'),
+        ]);
+        $this->checkoutConfig->method('getNativeMethods')->willReturn(['free', 'checkmo']);
 
         $context = $this->facade->context();
 
@@ -471,6 +531,40 @@ class FacadeTest extends TestCase
         $this->facade->place('braintree');
     }
 
+    public function testPlaceRefusesAnAllowlistedMethodThatTakesPaymentElsewhere(): void
+    {
+        $this->stubActiveMethods([
+            'stripe_payments_checkout' => $this->makeMethod('stripe_payments_checkout', 'Pay online', false),
+        ]);
+        $this->checkoutConfig->method('getNativeMethods')->willReturn(['stripe_payments_checkout']);
+
+        $this->checkoutSession->expects($this->never())->method('getQuote');
+        $this->cartManagement->expects($this->never())->method('placeOrder');
+
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage('That payment method is not available.');
+
+        $this->facade->place('stripe_payments_checkout');
+    }
+
+    public function testPlaceRefusesAMethodTheCartCannotUseAndNeverPlacesTheOrder(): void
+    {
+        $this->stubActiveMethods([
+            'free' => $this->makeMethod('free', 'No Payment Information Required', true, false),
+        ]);
+        $this->checkoutConfig->method('getNativeMethods')->willReturn(['free']);
+
+        $quote = $this->createMock(Quote::class);
+        $quote->method('getItemsCount')->willReturn(1);
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->cartManagement->expects($this->never())->method('placeOrder');
+
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage('That payment method is not available.');
+
+        $this->facade->place('free');
+    }
+
     public function testPlaceReturnsTheIncrementIdFromTheCreatedOrder(): void
     {
         $this->stubActiveMethods([
@@ -723,7 +817,10 @@ class FacadeTest extends TestCase
             $this->cartManagement, $this->addressFactory, $this->checkoutConfig, $this->paymentConfig,
             $this->scopeConfig, $this->countrySource, $this->currencyFactory, $factory,
             $this->agreementsList,
-            $this->agreementsFilter()
+            $this->agreementsFilter(),
+            $this->stripeInChat,
+            $this->orderRepository,
+            $this->url
         );
 
         $result = $facade->applyCoupon('welcome10');
@@ -806,5 +903,184 @@ class FacadeTest extends TestCase
         $ctx = $this->facade->context();
 
         $this->assertSame('GBP', $ctx['currency_symbol']);
+    }
+
+    // ------------------------------------------------------------------
+    // Stripe in the chat
+    // ------------------------------------------------------------------
+
+    private function stripeMethods(): void
+    {
+        $this->stubActiveMethods([
+            'checkmo'         => $this->makeMethod('checkmo', 'Check / Money order'),
+            'stripe_payments' => $this->makeMethod('stripe_payments', 'Pay online', false),
+        ]);
+        $this->checkoutConfig->method('getNativeMethods')->willReturn(['checkmo']);
+    }
+
+    /**
+     * A quote that can be placed; $payment receives the payment data.
+     *
+     * @return Quote&MockObject
+     */
+    private function placeableQuote(QuotePayment $payment): Quote
+    {
+        $currency = $this->createMock(CurrencyInterface::class);
+        $currency->method('getQuoteCurrencyCode')->willReturn('GBP');
+        $quote = $this->createMock(Quote::class);
+        $quote->method('getItemsCount')->willReturn(1);
+        $quote->method('getPayment')->willReturn($payment);
+        $quote->method('reserveOrderId')->willReturnSelf();
+        $quote->method('getReservedOrderId')->willReturn('000001021');
+        $quote->method('getData')->willReturnMap([['grand_total', null, 83.0]]);
+        $quote->method('getCurrency')->willReturn($currency);
+        $quote->method('getId')->willReturn(7);
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->customerSession->method('isLoggedIn')->willReturn(true);
+        return $quote;
+    }
+
+    private function orderInState(string $state, string $status): Order
+    {
+        $order = $this->createMock(Order::class);
+        $order->method('getState')->willReturn($state);
+        $order->method('getStatus')->willReturn($status);
+        return $order;
+    }
+
+    public function testContextOffersStripeWithItsFieldConfigWhenTheMerchantTurnedItOn(): void
+    {
+        $quote = $this->createMock(Quote::class);
+        $quote->method('getItemsCount')->willReturn(1);
+        $quote->method('isVirtual')->willReturn(false);
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->stripeMethods();
+        $this->stripeInChat->method('isAvailable')->willReturn(true);
+        $config = ['publishable_key' => 'pk_test_x', 'mode' => 'test', 'locale' => 'en-GB', 'currency' => 'gbp', 'amount' => 8300];
+        $this->stripeInChat->method('clientConfig')->willReturn($config);
+
+        $context = $this->facade->context();
+
+        $this->assertSame(['checkmo', 'stripe_payments'], array_column($context['methods'], 'code'));
+        $this->assertSame($config, $context['stripe']);
+    }
+
+    public function testContextLeavesStripeOutWhenItIsNotAvailable(): void
+    {
+        $quote = $this->createMock(Quote::class);
+        $quote->method('getItemsCount')->willReturn(1);
+        $quote->method('isVirtual')->willReturn(false);
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->stripeMethods();
+        $this->stripeInChat->method('isAvailable')->willReturn(false);
+
+        $context = $this->facade->context();
+
+        $this->assertSame(['checkmo'], array_column($context['methods'], 'code'));
+        $this->assertNull($context['stripe']);
+    }
+
+    public function testAStripePlaceWithoutATokenIsRefusedBeforeTheQuoteIsTouched(): void
+    {
+        $this->stripeMethods();
+        $this->stripeInChat->method('isAvailable')->willReturn(true);
+        $this->checkoutSession->expects($this->never())->method('getQuote');
+        $this->cartManagement->expects($this->never())->method('placeOrder');
+
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage('Enter your payment details.');
+
+        $this->facade->place('stripe_payments', [], 'not-a-token');
+    }
+
+    public function testAStripePlaceHandsTheTokenToTheStripeModuleAndReportsThePaidOrder(): void
+    {
+        $this->stripeMethods();
+        $this->stripeInChat->method('isAvailable')->willReturn(true);
+        $payment = $this->createMock(QuotePayment::class);
+        $payment->expects($this->once())->method('importData')->with([
+            'method'          => 'stripe_payments',
+            'additional_data' => ['confirmation_token' => 'ctoken_1AbCdEfGhIjK'],
+        ]);
+        $payment->expects($this->never())->method('setMethod');
+        $this->placeableQuote($payment);
+        $this->cartManagement->expects($this->once())->method('placeOrder')->with(7)->willReturn(55);
+        $this->orderRepository->method('get')->with(55)->willReturn($this->orderInState('processing', 'processing'));
+
+        $result = $this->facade->place('stripe_payments', [], 'ctoken_1AbCdEfGhIjK');
+
+        $this->assertSame('000001021', $result['order_id']);
+        $this->assertSame('processing', $result['status']);
+        $this->assertArrayNotHasKey('requires_action', $result);
+    }
+
+    public function testThreeDSecureComesBackAsRequiresActionWithNoOrder(): void
+    {
+        $this->stripeMethods();
+        $this->stripeInChat->method('isAvailable')->willReturn(true);
+        $this->placeableQuote($this->createMock(QuotePayment::class));
+        // What StripeIntegration\Payments\Helper\Generic::throwError()
+        // throws on the storefront: a plain \Exception subclass.
+        $this->cartManagement->method('placeOrder')
+            ->willThrowException(new \Exception('Authentication Required: pi_3Abc_secret_XyZ123'));
+        $this->orderRepository->expects($this->never())->method('get');
+
+        $result = $this->facade->place('stripe_payments', [], 'ctoken_1AbCdEfGhIjK');
+
+        $this->assertSame(['requires_action' => true, 'client_secret' => 'pi_3Abc_secret_XyZ123'], $result);
+    }
+
+    public function testAMalformedAuthenticationSecretIsNotPassedOn(): void
+    {
+        $this->stripeMethods();
+        $this->stripeInChat->method('isAvailable')->willReturn(true);
+        $this->placeableQuote($this->createMock(QuotePayment::class));
+        $this->cartManagement->method('placeOrder')
+            ->willThrowException(new \Exception('Authentication Required: <script>'));
+
+        $this->expectException(LocalizedException::class);
+
+        $this->facade->place('stripe_payments', [], 'ctoken_1AbCdEfGhIjK');
+    }
+
+    public function testAStripeDeclineIsShownToTheShopperInStripesWords(): void
+    {
+        $this->stripeMethods();
+        $this->stripeInChat->method('isAvailable')->willReturn(true);
+        $this->placeableQuote($this->createMock(QuotePayment::class));
+        $this->cartManagement->method('placeOrder')
+            ->willThrowException(new \Exception('Your card was declined.'));
+
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage('Your card was declined.');
+
+        $this->facade->place('stripe_payments', [], 'ctoken_1AbCdEfGhIjK');
+    }
+
+    public function testAStripeOrderLeftAwaitingPaymentIsNotReportedAsPaid(): void
+    {
+        $this->stripeMethods();
+        $this->stripeInChat->method('isAvailable')->willReturn(true);
+        $this->placeableQuote($this->createMock(QuotePayment::class));
+        $this->cartManagement->method('placeOrder')->willReturn(56);
+        $this->orderRepository->method('get')->willReturn($this->orderInState('pending_payment', 'pending_payment'));
+        $this->url->method('getUrl')->with('stripe/payment/index')->willReturn('https://shop.test/stripe/payment/index/');
+
+        $result = $this->facade->place('stripe_payments', [], 'ctoken_1AbCdEfGhIjK');
+
+        $this->assertSame('pending_payment', $result['status']);
+        $this->assertSame('https://shop.test/stripe/payment/index/', $result['continue_url']);
+    }
+
+    public function testStripeIsRefusedWhenTheMerchantHasNotTurnedItOn(): void
+    {
+        $this->stripeMethods();
+        $this->stripeInChat->method('isAvailable')->willReturn(false);
+        $this->cartManagement->expects($this->never())->method('placeOrder');
+
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage('That payment method is not available.');
+
+        $this->facade->place('stripe_payments', [], 'ctoken_1AbCdEfGhIjK');
     }
 }

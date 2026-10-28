@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-28
+
+### Added
+- **Card and wallet payments in the in-chat checkout, through the store's own Stripe
+  module.** New setting *Card and Wallet Payments in the Chat (Stripe)*, off by
+  default, shown on the native checkout mode. With Stripe's official Magento module
+  (4.4 or later, below 5) enabled and taking payment, `context` offers
+  `stripe_payments` with what Stripe.js needs (publishable key, mode, locale,
+  currency, the basket total in Stripe's minor units from the module's own
+  conversion, and its payment method configuration). `place` accepts a Stripe
+  ConfirmationToken and hands it to the Stripe module, which creates and confirms
+  the payment as on the checkout page. A card that needs 3-D Secure comes back as
+  `requires_action` with no order yet; the chat authenticates and places again. An
+  order the Stripe module leaves awaiting payment is never reported as paid.
+
+### Fixed
+- **The in-chat checkout no longer reports an unpaid order as confirmed.** It now
+  offers and places only Magento's offline payment methods, whatever is ticked in
+  *Payment Methods the Assistant May Use*. A method that takes payment after the
+  order is placed (a card form, or a redirect such as Stripe Checkout) used to
+  leave the order in `pending_payment`, with no payment taken, while the chat
+  said "Order confirmed". The *works in chat* label in that list now uses the same
+  rule.
+- **The in-chat checkout only lists methods the basket can use.** Each method is
+  checked against the basket as Magento's own checkout does, so "No Payment
+  Information Required" no longer appears on a basket that costs money, and a
+  method's minimum or maximum order total and allowed countries are respected.
+
 ## [1.7.0] - 2026-10-26
 
 ### Added

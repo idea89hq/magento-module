@@ -14,8 +14,10 @@ use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Directory\Model\Config\Source\Country as CountrySource;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Exception\LocalizedException;
+use Magento\Framework\UrlInterface;
 use Magento\Framework\Validator\EmailAddress;
 use Magento\Payment\Model\Config as PaymentConfig;
+use Magento\Payment\Model\MethodInterface;
 use Magento\Quote\Api\CartManagementInterface;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Api\Data\AddressInterface;
@@ -23,6 +25,8 @@ use Magento\Quote\Api\Data\AddressInterfaceFactory;
 use Magento\Directory\Model\CurrencyFactory;
 use Magento\Quote\Api\ShipmentEstimationInterface;
 use Magento\Quote\Model\Quote;
+use Magento\Sales\Api\OrderRepositoryInterface;
+use Magento\Sales\Model\Order;
 use Magento\Store\Model\ScopeInterface;
 use Magento\SalesRule\Model\CouponFactory;
 use Magento\CheckoutAgreements\Api\CheckoutAgreementsListInterface;
@@ -73,7 +77,11 @@ class Facade
         private readonly CouponFactory $couponFactory,
         // The store's own Terms and Conditions (Stores > Terms and Conditions).
         private readonly CheckoutAgreementsListInterface $agreementsList,
-        private readonly ActiveStoreAgreementsFilter $activeAgreementsFilter
+        private readonly ActiveStoreAgreementsFilter $activeAgreementsFilter,
+        // Card and wallet payments through the merchant's Stripe module.
+        private readonly StripeInChat $stripeInChat,
+        private readonly OrderRepositoryInterface $orderRepository,
+        private readonly UrlInterface $url
     ) {}
 
     /**
@@ -159,8 +167,11 @@ class Facade
         }
 
         $methods = [];
-        foreach ($this->allowedMethods() as $code => $title) {
-            $methods[] = ['code' => $code, 'title' => $title];
+        foreach ($this->allowedMethods() as $code => $method) {
+            if (!$this->isAvailableFor($method, $quote)) {
+                continue;
+            }
+            $methods[] = ['code' => $code, 'title' => (string) $method->getTitle()];
         }
 
         return [
@@ -187,7 +198,23 @@ class Facade
             // Customers > Address Templates > Show Telephone; Magento's own
             // default is required, and placeOrder() refuses a blank one.
             'phone_required'    => $this->phoneRequired(),
+            // Present only when the chat can take a card or wallet payment:
+            // what the widget needs to show Stripe's own fields.
+            'stripe'            => $this->offersStripe($methods) ? $this->stripeInChat->clientConfig($quote) : null,
         ];
+    }
+
+    /**
+     * @param array<int, array{code: string, title: string}> $methods
+     */
+    private function offersStripe(array $methods): bool
+    {
+        foreach ($methods as $m) {
+            if ($m['code'] === StripeInChat::METHOD) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -425,7 +452,7 @@ class Facade
      * @return array{order_id: string, total: string, currency: string}
      * @throws LocalizedException
      */
-    public function place(string $paymentMethod, array $agreementIds = []): array
+    public function place(string $paymentMethod, array $agreementIds = [], string $confirmationToken = ''): array
     {
         // The store's own Terms and Conditions: every one that needs a tick
         // must have been ticked. Magento's own checkout enforces this in its
@@ -445,10 +472,24 @@ class Facade
             throw new LocalizedException(__('That payment method is not available.'));
         }
 
+        // A Stripe payment is the shopper's details in Stripe's own fields,
+        // turned into a ConfirmationToken by Stripe.js. No token, no payment.
+        $isStripe = $paymentMethod === StripeInChat::METHOD;
+        if ($isStripe && !preg_match('/^ctoken_[A-Za-z0-9]{8,}$/', $confirmationToken)) {
+            throw new LocalizedException(__('Enter your payment details.'));
+        }
+
         $quote = $this->checkoutSession->getQuote();
 
         if (!$quote->getItemsCount()) {
             throw new LocalizedException(__('Your cart is empty.'));
+        }
+
+        // Allowlisted is not the same as usable for this cart: Magento's own
+        // checkout also asks the method (minimum/maximum order total,
+        // allowed countries, zero-total-only methods such as "free").
+        if (!$this->isAvailableFor($allowed[$paymentMethod], $quote)) {
+            throw new LocalizedException(__('That payment method is not available.'));
         }
 
         if (!$this->customerSession->isLoggedIn()) {
@@ -459,7 +500,17 @@ class Facade
             }
         }
 
-        $quote->getPayment()->setMethod($paymentMethod);
+        if ($isStripe) {
+            // importData, not setMethod: it runs the method's assignData(),
+            // which is where the Stripe module stores the token it confirms
+            // the PaymentIntent with.
+            $quote->getPayment()->importData([
+                'method'          => $paymentMethod,
+                'additional_data' => ['confirmation_token' => $confirmationToken],
+            ]);
+        } else {
+            $quote->getPayment()->setMethod($paymentMethod);
+        }
         // Reserve the increment id on OUR quote object now, before handing
         // the cart id to placeOrder(). CartManagementInterface::placeOrder()
         // only returns the numeric order entity id and reloads its own copy
@@ -472,41 +523,127 @@ class Facade
         $this->cartRepository->save($quote);
 
         try {
-            $this->cartManagement->placeOrder($quote->getId());
-        } catch (LocalizedException $e) {
-            // Magento's own LocalizedExceptions are already written to be
-            // shopper-safe (e.g. "out of stock") — pass them through as-is.
-            throw $e;
+            $orderId = $this->cartManagement->placeOrder($quote->getId());
         } catch (\Throwable $e) {
+            // The card needs 3-D Secure. The Stripe module stops before the
+            // order exists and hands back the PaymentIntent's client secret
+            // in the message; the browser authenticates and calls place()
+            // again, and the module then finds the PaymentIntent paid.
+            $secret = $isStripe ? $this->authenticationSecret($e) : null;
+            if ($secret !== null) {
+                return ['requires_action' => true, 'client_secret' => $secret];
+            }
+            if ($e instanceof LocalizedException) {
+                // Magento's own LocalizedExceptions are already written to be
+                // shopper-safe (e.g. "out of stock") — pass them through as-is.
+                throw $e;
+            }
+            if ($isStripe && trim($e->getMessage()) !== '') {
+                // Stripe's own decline text ("Your card was declined.") is
+                // written for shoppers; the module shows it on its checkout.
+                throw new LocalizedException(__($e->getMessage()));
+            }
             throw new LocalizedException(__('We could not place your order. Please try again.'));
         }
 
-        return [
+        $result = [
             'order_id' => (string) $quote->getReservedOrderId(),
             'total'    => $this->formatAmount((float) $quote->getData('grand_total')),
             'currency' => $this->currencyCode($quote),
         ];
+        if ($isStripe) {
+            $result += $this->stripeOutcome((int) $orderId);
+        }
+        return $result;
     }
 
     /**
-     * Payment method codes the merchant has explicitly allowed AND that are
-     * currently active in Magento, keyed by code with a display title.
-     * Empty on both an empty allowlist and a merchant who allowlisted a
-     * method they've since disabled — either way, nothing is offered.
+     * The client secret from the Stripe module's "Authentication Required:
+     * <client_secret>" stop, or null for any other failure. Only a secret
+     * of the shape Stripe issues is passed on.
+     */
+    private function authenticationSecret(\Throwable $e): ?string
+    {
+        $prefix = 'Authentication Required: ';
+        $message = $e->getMessage();
+        if (!str_starts_with($message, $prefix)) {
+            return null;
+        }
+        $secret = trim(substr($message, strlen($prefix)));
+        return preg_match('/^(?:pi|seti)_[A-Za-z0-9]+_secret_[A-Za-z0-9]+$/', $secret) ? $secret : null;
+    }
+
+    /**
+     * A paid Stripe order reports its status. One the module left waiting
+     * for the shopper (a payment type it does not stop for, if the merchant
+     * changed that setting) must not be called confirmed: the widget sends
+     * the shopper to the module's own return page, which finishes it.
      *
-     * @return array<string,string>
+     * @return array{status: string, continue_url?: string}
+     */
+    private function stripeOutcome(int $orderId): array
+    {
+        try {
+            $order = $this->orderRepository->get($orderId);
+        } catch (\Throwable $e) {
+            return ['status' => ''];
+        }
+        if ($order->getState() === Order::STATE_PENDING_PAYMENT) {
+            return ['status' => 'pending_payment', 'continue_url' => $this->url->getUrl('stripe/payment/index')];
+        }
+        return ['status' => (string) $order->getStatus()];
+    }
+
+    /**
+     * Payment methods the merchant has explicitly allowed AND that are
+     * currently active in Magento AND that complete without the shopper
+     * paying anywhere else, keyed by code. Empty on both an empty allowlist
+     * and a merchant who allowlisted a method they've since disabled —
+     * either way, nothing is offered.
+     *
+     * Offline only: placeOrder() is the last thing this flow does, so a
+     * method that takes payment after it (a card form, a redirect to a
+     * hosted payment page) would leave an unpaid order that the widget then
+     * reports as confirmed. Seen live with Stripe's redirect flow: the order
+     * sat in pending_payment with an open Checkout Session nobody was sent to.
+     * The exception is Stripe's own card and wallet method when the merchant
+     * has turned on StripeInChat: the shopper pays in Stripe's fields in the
+     * chat before the order is placed.
+     *
+     * @return array<string,MethodInterface>
      */
     private function allowedMethods(): array
     {
         $allowlist = array_flip($this->checkoutConfig->getNativeMethods());
         $methods = [];
         foreach ($this->paymentConfig->getActiveMethods() as $code => $method) {
-            if (!isset($allowlist[$code])) {
+            // The one method that takes payment and still completes here:
+            // Stripe, through its own fields in the chat (StripeInChat). Its
+            // switch is the merchant's opt-in, not the offline allowlist.
+            if ($code === StripeInChat::METHOD && $this->stripeInChat->isAvailable()) {
+                $methods[$code] = $method;
                 continue;
             }
-            $methods[$code] = (string) $method->getTitle();
+            if (!isset($allowlist[$code]) || !$method->isOffline()) {
+                continue;
+            }
+            $methods[$code] = $method;
         }
         return $methods;
+    }
+
+    /**
+     * The method's own answer for this cart, as Magento's checkout asks it.
+     * A method that throws is treated as unavailable rather than breaking
+     * the whole list.
+     */
+    private function isAvailableFor(MethodInterface $method, Quote $quote): bool
+    {
+        try {
+            return (bool) $method->isAvailable($quote);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /**
@@ -654,6 +791,9 @@ class Facade
             : ($incl ? (float) $address->getShippingInclTax() : (float) $address->getShippingAmount());
         $code = trim((string) $quote->getCouponCode());
         return [
+            // Stripe's fields must show the same amount the order will be
+            // placed for; the widget updates them from this on every change.
+            'stripe_amount' => $this->stripeInChat->isAvailable() ? $this->stripeInChat->amount($quote) : null,
             'subtotal'    => $this->formatAmount((float) $quote->getData('subtotal')),
             'grand_total' => $this->formatAmount((float) $quote->getData('grand_total')),
             'breakdown'   => [
