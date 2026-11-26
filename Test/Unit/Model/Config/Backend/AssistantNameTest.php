@@ -173,4 +173,54 @@ class AssistantNameTest extends TestCase
 
         $this->assertSame('d89 helper', $model->getValue());
     }
+
+    public function testTheKeyTypedIntoTheSameSaveIsUsedOnANewStore(): void
+    {
+        // A new store: no key stored yet, and the merchant pastes it in the
+        // same save that sets the name. The stored config is not rebuilt
+        // until after every beforeSave() runs, so this used to refuse with
+        // "Add your IDEA89 API key".
+        $this->config->method('getApiKey')->willReturn('');
+        $this->config->method('getApiUrl')->willReturn('https://api.idea89.com');
+        $this->client->expects($this->once())
+            ->method('updateAssistantName')
+            ->with('Robin', 'idea89_new_key', 'https://api.idea89.com')
+            ->willReturn(true);
+
+        $model = $this->makeModel('');
+        $model->setValue('Robin');
+        $model->setData('groups', ['general' => ['fields' => ['api_key' => ['value' => ' idea89_new_key ']]]]);
+
+        $this->assertSame($model, $model->beforeSave());
+    }
+
+    public function testAnUntouchedKeyMaskFallsBackToTheStoredKey(): void
+    {
+        $this->config->method('getApiKey')->willReturn('idea89_live_key');
+        $this->config->method('getApiUrl')->willReturn('https://api.idea89.com');
+        $this->client->expects($this->once())
+            ->method('updateAssistantName')
+            ->with('Robin', 'idea89_live_key', 'https://api.idea89.com')
+            ->willReturn(true);
+
+        $model = $this->makeModel('Mira');
+        $model->setValue('Robin');
+        $model->setData('groups', ['general' => ['fields' => ['api_key' => ['value' => '******']]]]);
+
+        $this->assertSame($model, $model->beforeSave());
+    }
+
+    public function testWithNoKeyAnywhereTheSaveIsStillRefused(): void
+    {
+        $this->config->method('getApiKey')->willReturn('');
+        $this->config->method('getApiUrl')->willReturn('https://api.idea89.com');
+        $this->client->expects($this->never())->method('updateAssistantName');
+
+        $model = $this->makeModel('');
+        $model->setValue('Robin');
+
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessageMatches('/Add your IDEA89 API key/');
+        $model->beforeSave();
+    }
 }

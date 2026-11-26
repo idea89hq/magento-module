@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-11-26
+
+### Fixed
+- **The agentic commerce feed now publishes the price a shopper pays, VAT included.**
+  A catalogue price rule for logged-out shoppers always counts, and on stores that enter
+  prices excluding tax the feed adds VAT at the product's rate. Stores that enter prices
+  including tax see no change.
+- **The agentic commerce feed reports salable stock.** With MSI, a product whose stock is
+  all reserved by unshipped orders now shows `out_of_stock`, the same as the assistant.
+- **The first settings save on a new store works.** Pasting the API key and setting the
+  Assistant Name (or Checkout Window) in the same save was refused with "Add your IDEA89
+  API key and URL before changing this setting", because the key was read from stored
+  config before Magento had saved it. The key typed into the form is now used.
+
 ## [1.7.1] - 2026-10-28
 
 ### Added

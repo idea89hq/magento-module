@@ -173,4 +173,22 @@ class CheckoutUiTest extends TestCase
 
         $this->assertSame('full', $model->getValue());
     }
+
+    public function testTheKeyTypedIntoTheSameSaveIsUsedOnANewStore(): void
+    {
+        // The API key lives in the General group, this field in Checkout;
+        // Magento hands every backend model the whole section's groups.
+        $this->config->method('getApiKey')->willReturn('');
+        $this->config->method('getApiUrl')->willReturn('https://api.idea89.com');
+        $this->client->expects($this->once())
+            ->method('updateCheckoutUi')
+            ->with('inline', 'idea89_new_key', 'https://api.idea89.com')
+            ->willReturn(true);
+
+        $model = $this->makeModel('full');
+        $model->setValue('inline');
+        $model->setData('groups', ['general' => ['fields' => ['api_key' => ['value' => 'idea89_new_key']]]]);
+
+        $this->assertSame($model, $model->beforeSave());
+    }
 }

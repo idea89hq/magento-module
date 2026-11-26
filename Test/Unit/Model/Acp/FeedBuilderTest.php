@@ -9,15 +9,15 @@ declare(strict_types=1);
 namespace Idea89\Assistant\Test\Unit\Model\Acp;
 
 use Idea89\Assistant\Model\Acp\FeedBuilder;
+use Idea89\Assistant\Model\Sync\PriceResolver;
 use Idea89\Assistant\Model\Sync\ProductSerializer;
+use Idea89\Assistant\Model\Sync\StockResolver;
 use Magento\Catalog\Api\ProductRepositoryInterface;
 use Magento\Catalog\Model\Product;
 use Magento\Catalog\Model\Product\Attribute\Source\Status;
 use Magento\Catalog\Model\Product\Visibility;
 use Magento\Catalog\Model\ResourceModel\Product\Collection;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
-use Magento\CatalogInventory\Api\Data\StockItemInterface;
-use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\ConfigurableProduct\Model\Product\Type\Configurable;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Exception\NoSuchEntityException;
@@ -62,8 +62,20 @@ class FeedBuilderTest extends TestCase
     /** @var Collection&MockObject */
     private $collection;
 
-    /** @var StockRegistryInterface&MockObject */
-    private $stockRegistry;
+    /** @var StockResolver&MockObject */
+    private $stockResolver;
+
+    /** @var PriceResolver&MockObject */
+    private $priceResolver;
+
+    /** @var array<int, float> Per-product-id catalogue rule prices for a single test. */
+    private array $rulePriceById = [];
+
+    /** @var array<int, array{0: int, 1: string, 2: int|null}> Captured StockResolver::stockFor() calls. */
+    private array $stockCalls = [];
+
+    private bool $pricesIncludeTax = true;
+    private ?float $taxRate = 20.0;
 
     /** @var StoreManagerInterface&MockObject */
     private $storeManager;
@@ -96,7 +108,7 @@ class FeedBuilderTest extends TestCase
     private ?int $capturedCurPage = null;
     private ?int $capturedPageSize = null;
 
-    /** @var array<int, StockItemInterface> Per-product-id stock overrides for a single test. */
+    /** @var array<int, array{in_stock: bool, qty: int|null}> Per-product-id stock overrides for a single test. */
     private array $stockItemsById = [];
 
     /** @var Product[] Mutable, read by getItems()'s callback — see stubResults(). */
@@ -110,7 +122,8 @@ class FeedBuilderTest extends TestCase
         $this->productRepository = $this->createMock(ProductRepositoryInterface::class);
         $this->collectionFactory = $this->createMock(CollectionFactory::class);
         $this->collection        = $this->createMock(Collection::class);
-        $this->stockRegistry     = $this->createMock(StockRegistryInterface::class);
+        $this->stockResolver     = $this->createMock(StockResolver::class);
+        $this->priceResolver     = $this->createMock(PriceResolver::class);
         $this->storeManager      = $this->createMock(StoreManagerInterface::class);
         $this->scopeConfig       = $this->createMock(ScopeConfigInterface::class);
         $this->productSerializer = $this->createMock(ProductSerializer::class);
@@ -167,7 +180,7 @@ class FeedBuilderTest extends TestCase
         );
         // Single callback each (rather than a second method()->willReturn()
         // call from stubResults() below) — same reasoning as
-        // $this->stockRegistry above: PHPUnit does not document match order
+        // $this->stockResolver above: PHPUnit does not document match order
         // between two unconstrained stubs on the same method, so a second
         // stub is not guaranteed to override the first.
         $this->itemsToReturn = [];
@@ -191,23 +204,42 @@ class FeedBuilderTest extends TestCase
         // not document as deterministic) lets individual tests override
         // just one product id via $this->stockItemsById.
         $this->stockItemsById = [];
-        $defaultStock = $this->createMock(StockItemInterface::class);
-        $defaultStock->method('getProductId')->willReturn(0);
-        $this->stockRegistry->method('getStockItem')->willReturnCallback(
-            function (int $productId) use ($defaultStock) {
-                return $this->stockItemsById[$productId] ?? $defaultStock;
+        $this->stockCalls = [];
+        $this->stockResolver->method('stockFor')->willReturnCallback(
+            function (int $productId, string $sku, ?int $websiteId = null) {
+                $this->stockCalls[] = [$productId, $sku, $websiteId];
+                return $this->stockItemsById[$productId] ?? ['in_stock' => true, 'qty' => null];
             }
         );
+
+        // Default: no catalogue rule, prices entered including VAT, so the
+        // published amount is getFinalPrice() unchanged. The real
+        // PriceResolver::shopperPrice() is "the lower of final and rule".
+        $this->rulePriceById = [];
+        $this->pricesIncludeTax = true;
+        $this->taxRate = 20.0;
+        $this->priceResolver->method('shopperPrice')->willReturnCallback(
+            function (?float $final, Product $product) {
+                $rule = $this->rulePriceById[(int) $product->getId()] ?? null;
+                if ($rule === null) {
+                    return $final;
+                }
+                return $final === null || $final <= 0 ? $rule : min($final, $rule);
+            }
+        );
+        $this->priceResolver->method('pricesIncludeTax')->willReturnCallback(fn () => $this->pricesIncludeTax);
+        $this->priceResolver->method('taxRate')->willReturnCallback(fn () => $this->taxRate);
 
         $this->feedBuilder = new FeedBuilder(
             $this->productRepository,
             $this->collectionFactory,
-            $this->stockRegistry,
             $this->storeManager,
             $this->scopeConfig,
             $this->productSerializer,
             $this->configurableType,
-            $this->logger
+            $this->logger,
+            $this->priceResolver,
+            $this->stockResolver
         );
     }
 
@@ -472,11 +504,8 @@ class FeedBuilderTest extends TestCase
         $this->stubResults([$product], 1);
         $this->configurableType->method('getParentIdsByChild')->willReturn([]);
 
-        $stock = $this->createMock(StockItemInterface::class);
-        $stock->method('getProductId')->willReturn(10);
-        $stock->method('getIsInStock')->willReturn(false);
-        $stock->method('getQty')->willReturn(0.0);
-        $this->stockItemsById[10] = $stock;
+        // Salable stock (MSI) says no, whatever the legacy stock item says.
+        $this->stockItemsById[10] = ['in_stock' => false, 'qty' => 0];
 
         $result = $this->feedBuilder->build(1, 200);
 
@@ -590,6 +619,79 @@ class FeedBuilderTest extends TestCase
         $this->assertSame('24.90', $result['products'][0]['price']['amount']);
         $this->assertIsString($result['products'][0]['price']['amount']);
         $this->assertSame('GBP', $result['products'][0]['price']['currency']);
+    }
+
+    public function testStockComesFromTheSalableStockResolver(): void
+    {
+        $product = $this->makeProduct(11, 'SKU-RESERVED');
+        $this->stubResults([$product], 1);
+        $this->configurableType->method('getParentIdsByChild')->willReturn([]);
+        $this->feedBuilder->build(1, 200);
+
+        $this->assertSame([[11, 'SKU-RESERVED', self::WEBSITE_ID]], $this->stockCalls);
+    }
+
+    public function testCatalogueRulePriceIsPublishedWhenLower(): void
+    {
+        $product = $this->makeProduct(3, 'SKU-RULE', 50.0);
+        $this->stubResults([$product], 1);
+        $this->configurableType->method('getParentIdsByChild')->willReturn([]);
+        $this->rulePriceById[3] = 40.0;
+
+        $result = $this->feedBuilder->build(1, 200);
+
+        $this->assertSame('40.00', $result['products'][0]['price']['amount']);
+    }
+
+    public function testVatIsAddedWhenCatalogPricesExcludeTax(): void
+    {
+        $product = $this->makeProduct(4, 'SKU-EXVAT', 25.0);
+        $this->stubResults([$product], 1);
+        $this->configurableType->method('getParentIdsByChild')->willReturn([]);
+        $this->pricesIncludeTax = false;
+        $this->taxRate = 20.0;
+
+        $result = $this->feedBuilder->build(1, 200);
+
+        $this->assertSame('30.00', $result['products'][0]['price']['amount']);
+    }
+
+    public function testVatIsAddedAfterTheRulePrice(): void
+    {
+        $product = $this->makeProduct(5, 'SKU-RULE-EXVAT', 50.0);
+        $this->stubResults([$product], 1);
+        $this->configurableType->method('getParentIdsByChild')->willReturn([]);
+        $this->rulePriceById[5] = 40.0;
+        $this->pricesIncludeTax = false;
+
+        $result = $this->feedBuilder->build(1, 200);
+
+        $this->assertSame('48.00', $result['products'][0]['price']['amount']);
+    }
+
+    public function testPriceIsUnchangedWhenCatalogPricesIncludeTax(): void
+    {
+        $product = $this->makeProduct(6, 'SKU-INCVAT', 30.0);
+        $this->stubResults([$product], 1);
+        $this->configurableType->method('getParentIdsByChild')->willReturn([]);
+        $this->pricesIncludeTax = true;
+
+        $result = $this->feedBuilder->build(1, 200);
+
+        $this->assertSame('30.00', $result['products'][0]['price']['amount']);
+    }
+
+    public function testPriceIsLeftAsEnteredWhenNoTaxRateResolves(): void
+    {
+        $product = $this->makeProduct(7, 'SKU-NORATE', 25.0);
+        $this->stubResults([$product], 1);
+        $this->configurableType->method('getParentIdsByChild')->willReturn([]);
+        $this->pricesIncludeTax = false;
+        $this->taxRate = null;
+
+        $result = $this->feedBuilder->build(1, 200);
+
+        $this->assertSame('25.00', $result['products'][0]['price']['amount']);
     }
 
     public function testResponseShapeIncludesVersionPageAndSeller(): void

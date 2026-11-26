@@ -37,6 +37,8 @@ use Magento\Framework\Registry;
  */
 class CheckoutUi extends Value
 {
+    use ResolvesApiKey;
+
     public function __construct(
         Context $context,
         Registry $registry,
@@ -96,7 +98,7 @@ class CheckoutUi extends Value
             return $this;
         }
 
-        $apiKey = $this->idea89Config->getApiKey();
+        $apiKey = $this->resolveApiKey();
         $apiUrl = $this->idea89Config->getApiUrl();
 
         if ($apiKey === '' || $apiUrl === '') {

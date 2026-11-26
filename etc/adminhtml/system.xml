@@ -123,10 +123,6 @@ Changes you make in the IDEA89 dashboard then reach your storefront when Magento
             <group id="locator" translate="label comment" type="text" sortOrder="27" showInDefault="1" showInWebsite="1" showInStore="1">
                 <label>Store Locator</label>
                 <comment><![CDATA[
-<div style="padding:10px 14px;margin:0 0 6px;background:#fff8e1;border:1px solid #f4d35e;border-radius:6px;color:#5a4500;font-size:13px;line-height:1.5;">
-  <strong style="color:#7a5a00;">✨ Pro plan feature.</strong> The Store Locator is included on the <strong>Pro</strong> tier and above.
-  If you're on Starter, upgrade in your <a href="https://app.idea89.com/billing" target="_blank" rel="noopener" style="color:#5a4500;text-decoration:underline;">IDEA89 dashboard</a> to use these settings.
-</div>
 <div style="font-size:12.5px;color:#555;line-height:1.5;">
   Online-only retailer? Set <strong>Enable Store Locator</strong> below to <em>No</em> and the page and chat-widget locator both disappear from your storefront.<br/>
   All content fields fall back to sensible defaults when blank. Leave layout blank to inherit the global setting from your dashboard.<br/>

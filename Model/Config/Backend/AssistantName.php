@@ -38,6 +38,8 @@ use Magento\Framework\Registry;
  */
 class AssistantName extends Value
 {
+    use ResolvesApiKey;
+
     /** Matches the dashboard's own bound, so neither side can store a name the other rejects. */
     private const MAX_LENGTH = 100;
 
@@ -91,7 +93,7 @@ class AssistantName extends Value
             return $this;
         }
 
-        $apiKey = $this->idea89Config->getApiKey();
+        $apiKey = $this->resolveApiKey();
         $apiUrl = $this->idea89Config->getApiUrl();
 
         if ($apiKey === '' || $apiUrl === '') {

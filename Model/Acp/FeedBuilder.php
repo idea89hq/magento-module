@@ -14,14 +14,15 @@ use Magento\Catalog\Model\Product\Attribute\Source\Status;
 use Magento\Catalog\Model\Product\Visibility;
 use Magento\Catalog\Model\ResourceModel\Product\Collection;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
-use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\ConfigurableProduct\Model\Product\Type\Configurable;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Store\Api\Data\StoreInterface;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use Idea89\Assistant\Model\Sync\PriceResolver;
 use Idea89\Assistant\Model\Sync\ProductSerializer;
+use Idea89\Assistant\Model\Sync\StockResolver;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -46,6 +47,11 @@ use Psr\Log\LoggerInterface;
  * silently drop every non-price-indexed product — including every
  * out-of-stock one — from `products`/`total`, and reverted. Full account,
  * with the live counts, in the task report.
+ *
+ * Since 2026-11-03 the published amount is shopperPrice(): finalPrice() as
+ * above, then the NOT LOGGED IN catalogue rule price and VAT, both through
+ * the sync's PriceResolver. Stock is the MSI salable figure through the
+ * sync's StockResolver, so the feed and the assistant agree on both.
  *
  * "Individually visible" here mirrors Mini.php's actual gate
  * (ProductHelper::canShow(), which is enabled + visibility !=
@@ -87,12 +93,13 @@ class FeedBuilder
     public function __construct(
         private readonly ProductRepositoryInterface $productRepository,
         private readonly CollectionFactory $productCollectionFactory,
-        private readonly StockRegistryInterface $stockRegistry,
         private readonly StoreManagerInterface $storeManager,
         private readonly ScopeConfigInterface $scopeConfig,
         private readonly ProductSerializer $productSerializer,
         private readonly Configurable $configurableType,
         private readonly LoggerInterface $logger,
+        private readonly PriceResolver $priceResolver,
+        private readonly StockResolver $stockResolver,
     ) {
     }
 
@@ -195,7 +202,7 @@ class FeedBuilder
         if ($page <= $lastPage) {
             foreach ($collection->getItems() as $product) {
                 /** @var ProductInterface $product */
-                $price = $this->finalPrice($product, $storeId);
+                $price = $this->shopperPrice($product, $store, $storeId);
                 if ($price <= 0.0) {
                     $skippedZeroPrice++;
                     $this->logger->info(
@@ -244,9 +251,12 @@ class FeedBuilder
         /** @var \Magento\Catalog\Model\Product $product */
         $baseUrl = rtrim((string) $store->getBaseUrl(), '/');
 
-        $stockItem = $this->stockRegistry->getStockItem((int) $product->getId());
-        $inStock = $stockItem->getProductId() ? (bool) $stockItem->getIsInStock() : true;
-        $qty = $stockItem->getProductId() ? (int) $stockItem->getQty() : 0;
+        // Salable stock, the same figure the catalogue sync sends: with MSI an
+        // order reserves stock without touching the legacy stock item, so the
+        // legacy flag says "in stock" until the shipment deducts it.
+        $stock = $this->stockResolver->stockFor((int) $product->getId(), (string) $product->getSku(), $websiteId);
+        $inStock = $stock['in_stock'];
+        $qty = $stock['qty'] ?? 0;
 
         $item = [
             'id' => (string) $product->getSku(),
@@ -281,6 +291,32 @@ class FeedBuilder
         }
 
         return $item;
+    }
+
+    /**
+     * The price a logged-out UK shopper pays, VAT included.
+     *
+     * Two corrections on top of finalPrice(), both shared with the catalogue
+     * sync through PriceResolver. A catalogue price rule for the NOT LOGGED IN
+     * group always counts, even if the rule observer did not run for this
+     * request. And VAT is added when the store's "Catalog Prices" setting says
+     * prices are entered excluding tax, at the rate Magento applies to the
+     * product's tax class at the store's default destination. Agents show
+     * this price to consumers, and UK consumer prices must include VAT (it is
+     * also what Merchant Center expects), so the feed never publishes an
+     * ex-VAT amount whatever the store's own display setting. With no
+     * resolvable rate the amount is left as entered.
+     */
+    private function shopperPrice(ProductInterface $product, StoreInterface $store, int $storeId): float
+    {
+        /** @var \Magento\Catalog\Model\Product $product */
+        $price = $this->finalPrice($product, $storeId);
+        $price = (float) ($this->priceResolver->shopperPrice($price > 0.0 ? $price : null, $product, $store) ?? 0.0);
+        if ($price <= 0.0 || $this->priceResolver->pricesIncludeTax($store)) {
+            return $price;
+        }
+        $rate = $this->priceResolver->taxRate($product, $store);
+        return $rate === null || $rate <= 0.0 ? $price : round($price * (1 + $rate / 100), 2);
     }
 
     /**
